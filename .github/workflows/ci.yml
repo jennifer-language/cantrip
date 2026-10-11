@@ -1,0 +1,226 @@
+# SPDX-License-Identifier: LGPL-3.0-only
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["[0-9]+.[0-9]+.[0-9]+", "[0-9]+.[0-9]+.[0-9]+-*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The interpreter CI runs against: a release (X.Y.Z, installed from its
+  # checksummed .deb) or a commit of Jennifer's main branch (built with Go).
+  # cantrip calls library functions first released in 0.25.0 - the floor in
+  # deck.toml - so until 0.25.0 is published CI pins the main-branch commit the
+  # project was last verified against. Switch this to "0.25.0" once it ships;
+  # bumping it is how the project moves to a newer language. Not named
+  # JENNIFER: scripts/check.sh reads that as the path of the interpreter to run.
+  JENNIFER_REF: "7e63a503ed75335ffc6da60128a95684cfa45678"
+
+jobs:
+  check:
+    name: Lint, docs and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Only a commit needs a toolchain; a release installs from its .deb.
+      - if: ${{ !contains(env.JENNIFER_REF, '.') }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Install Jennifer ${{ env.JENNIFER_REF }}
+        run: ./scripts/install-jennifer.sh "$JENNIFER_REF"
+
+      # Guards against CI testing an interpreter below the [engines] floor. A
+      # pinned release must be at or above it; a pinned commit must build as a
+      # -dev version, which is ahead of every release and passes any floor.
+      - name: Check the pinned interpreter satisfies the [engines] floor
+        run: |
+          set -eu
+          floor="$(sed -n 's/^jennifer = ">=\(.*\)"$/\1/p' deck.toml)"
+          installed="$(jennifer version)"
+          echo "deck.toml floor: $floor, CI pins: $JENNIFER_REF, installed: $installed"
+          case "$installed" in
+            *-dev*) exit 0 ;;
+          esac
+          lowest="$(printf '%s\n%s\n' "$floor" "$installed" | sort -V | head -1)"
+          test "$lowest" = "$floor" || {
+            echo "::error::CI runs jennifer $installed, below the deck.toml floor $floor"
+            exit 1
+          }
+
+      - name: Run the gate
+        run: ./scripts/check.sh
+
+  build:
+    name: Build the example deck and the book
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Only a commit needs a toolchain; a release installs from its .deb.
+      - if: ${{ !contains(env.JENNIFER_REF, '.') }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Install Jennifer ${{ env.JENNIFER_REF }}
+        run: ./scripts/install-jennifer.sh "$JENNIFER_REF"
+
+      - name: Build every theme and ratio
+        run: |
+          set -eux
+          mkdir -p dist
+          # Every theme the build lists, so a new one is built without editing this.
+          themes="$(./bin/cantrip themes | awk '/^themes:/ { on = 1; next } /^[a-z]+:/ { on = 0 } on { print $1 }')"
+          for theme in $themes; do
+            ./bin/cantrip build examples/sample.md \
+              --theme "$theme" --out "dist/sample-$theme" --verbose
+          done
+          for ratio in 16:9 16:10 4:3; do
+            ./bin/cantrip pdf examples/sample.md \
+              --ratio "$ratio" --out "dist/sample-${ratio//:/x}.pdf" --verbose
+          done
+          ls -l dist
+
+      - name: Check the PDFs are well formed
+        run: |
+          set -eux
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qpdf
+          for pdf in dist/*.pdf; do
+            qpdf --check "$pdf"
+          done
+
+      # Grimoire's own floor is above this project's, so the book is built on a
+      # best-effort basis: a release too old for Grimoire must not fail the
+      # build of a tool that does not depend on it.
+      - name: Build the documentation book
+        id: book
+        continue-on-error: true
+        run: |
+          set -eux
+          git clone --depth 1 https://github.com/jennifer-language/grimoire.git /tmp/grimoire
+          /tmp/grimoire/bin/grimoire build --config grimoire.toml --pdf
+          test -s docs-site/index.html
+
+      - name: Upload the artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            dist/
+            docs-site/
+          if-no-files-found: warn
+          retention-days: 7
+
+  pages:
+    name: Publish the book
+    needs: [check, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Only a commit needs a toolchain; a release installs from its .deb.
+      - if: ${{ !contains(env.JENNIFER_REF, '.') }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Install Jennifer ${{ env.JENNIFER_REF }}
+        run: ./scripts/install-jennifer.sh "$JENNIFER_REF"
+
+      - name: Build the book and the example deck
+        run: |
+          set -eux
+          git clone --depth 1 https://github.com/jennifer-language/grimoire.git /tmp/grimoire
+          /tmp/grimoire/bin/grimoire build --config grimoire.toml --pdf
+          ./bin/cantrip build examples/sample.md --out docs-site/sample
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  release:
+    name: Release
+    needs: [check, build]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Only a commit needs a toolchain; a release installs from its .deb.
+      - if: ${{ !contains(env.JENNIFER_REF, '.') }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Install Jennifer ${{ env.JENNIFER_REF }}
+        run: ./scripts/install-jennifer.sh "$JENNIFER_REF"
+
+      # A tag that disagrees with the manifest is a mislabelled release, so it
+      # is refused here rather than published and discovered later.
+      - name: Check the tag matches the manifest and the source
+        run: |
+          set -eu
+          tag="${GITHUB_REF_NAME}"
+          manifest="$(sed -n 's/^version = "\(.*\)"$/\1/p' deck.toml | head -1)"
+          source="$(sed -n 's/.*VERSION as string init "\(.*\)";/\1/p' src/cli.j)"
+          reported="$(./bin/cantrip --version | tr -d '[:space:]')"
+          echo "tag=$tag deck.toml=$manifest src/cli.j=$source reported=$reported"
+          test "$tag" = "$manifest" || {
+            echo "::error::tag $tag does not match deck.toml version $manifest"
+            exit 1
+          }
+          test "$tag" = "$source" || {
+            echo "::error::tag $tag does not match VERSION in src/cli.j ($source)"
+            exit 1
+          }
+
+      - name: Build the release artifacts
+        run: |
+          set -eux
+          name="cantrip-${GITHUB_REF_NAME}"
+          mkdir -p "dist/$name"
+          cp -r bin src scripts examples docs deck.toml grimoire.toml \
+            LICENSE README.md .editorconfig "dist/$name/"
+          rm -f "dist/$name"/examples/*.html "dist/$name"/examples/*.pdf
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          rm -rf "dist/$name"
+          ./bin/cantrip build examples/sample.md --out "dist/$name-example"
+          ( cd dist && sha256sum ./*.tar.gz ./*.html ./*.pdf > SHA256SUMS )
+          ls -l dist
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist/*.tar.gz
+            dist/*.html
+            dist/*.pdf
+            dist/SHA256SUMS

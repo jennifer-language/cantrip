@@ -1,0 +1,15 @@
+# Build output of the example deck
+examples/*.html
+examples/*.pdf
+
+# Grimoire output (the site and its printable book)
+docs-site/
+
+# jvc vendor tree (never committed; `jvc install` rebuilds it from the lockfile)
+vendor/
+.jvc/
+
+# Editors and operating systems
+*.swp
+*~
+.DS_Store

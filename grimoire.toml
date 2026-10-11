@@ -1,0 +1,36 @@
+[book]
+title = "Cantrip"
+description = "A Markdown file in, an HTML slideshow and a PDF out"
+authors = ["mplx"]
+language = "en"
+src = "docs"
+
+[build]
+out = "docs-site"
+clean = true
+
+[html]
+theme = "grimoire"
+mode = "auto"
+navPosition = "left"
+tocPosition = "right"
+tocDepth = 3
+sectionNumbers = true
+repoUrl = "https://github.com/jennifer-language/cantrip"
+repoLabel = "Source"
+editUrl = "https://github.com/jennifer-language/cantrip/edit/main/docs/"
+titleUrl = ""
+
+[highlight]
+enabled = true
+
+[search]
+enabled = true
+
+[pdf]
+enabled = true
+output = "book.pdf"
+paper = "a4"
+bookmarkLevel = 3
+pageNumbers = true
+titlePage = true

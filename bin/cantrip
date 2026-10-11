@@ -1,0 +1,22 @@
+#!/usr/bin/env -S jennifer run
+# SPDX-License-Identifier: LGPL-3.0-only
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
+# pragma-jennifer-version: >=0.25.0
+
+/**
+ * The cantrip launcher.
+ *
+ * A module's top level is declarations-only, so a deck cannot be run; this
+ * entry script is the non-module half. It holds no logic of its own - it
+ * hands the arguments to `cli.run` and turns the code it returns into the
+ * process's exit status.
+ * @module cantrip
+ * @author mplx <mplx@jennifer-lang.dev>
+ * @license LGPL-3.0-only
+ */
+
+use os;
+
+import "../src/cli.j" as cli;
+
+exit cli.run(os.ARGS);

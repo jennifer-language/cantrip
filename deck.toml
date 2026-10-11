@@ -1,0 +1,16 @@
+[package]
+name = "cantrip"
+version = "0.1.0"
+description = "Markdown slide decks: an HTML slideshow and a PDF from one file"
+license = "LGPL-3.0-only"
+authors = ["mplx@jennifer-lang.dev"]
+keywords = ["slides", "presentation", "markdown", "pdf", "static-site"]
+bin = "bin/cantrip"
+capabilities = []
+
+[package.urls]
+homepage = "https://github.com/jennifer-language/cantrip"
+manual = "https://jennifer-language.github.io/cantrip/"
+
+[engines]
+jennifer = ">=0.25.0"
