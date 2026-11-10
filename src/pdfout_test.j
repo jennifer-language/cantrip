@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 /**
  * White-box tests for the PDF renderer.
@@ -148,14 +148,14 @@ func testCollectImagesEmpty() {
 
 /** Walking a tree returns every image below the node, in document order. */
 func testCollectImages() {
-    def doc as markdown.Node init markdown.parse("![a](1.png)\n\n![b](2.png)\n");
+    def doc as doctree.Node init markdown.parse("![a](1.png)\n\n![b](2.png)\n");
     testing.assertEqual(collectImages($doc), ["1.png", "2.png"]);
 }
 
 /** The layout is two thirds of the printed page and carries the metadata. */
 func testLayout() {
     def deck as slides.Deck init fixture();
-    def got as markdown.PdfOptions init layout($deck, defaults());
+    def got as doctree.PdfOptions init layout($deck, defaults());
     testing.assertEqual($got.pageWidth, 640);
     testing.assertEqual($got.pageHeight, 360);
     testing.assertEqual($got.imageDpi, IMAGE_DPI);
@@ -174,7 +174,7 @@ func testLayout() {
  * so the screen's dark code shade would make code unreadable on paper.
  */
 func testLayoutUsesPrintShades() {
-    def got as markdown.PdfOptions init layout(fixture(), defaults());
+    def got as doctree.PdfOptions init layout(fixture(), defaults());
     def t as theme.Theme init theme.theme("midnight");
     testing.assertEqual($got.codeFill, fill($t.printCodeBg));
     testing.assertEqual($got.quoteFill, fill($t.printCodeBg));
@@ -241,7 +241,7 @@ func testDocument() {
 func testLayoutCarriesImages() {
     def opts as Options init defaults();
     $opts.images["fig.png"] = pdf.loadImage("fig", onePixelPng());
-    def got as markdown.PdfOptions init layout(fixture(), $opts);
+    def got as doctree.PdfOptions init layout(fixture(), $opts);
     testing.assertTrue(maps.has($got.images, "fig.png"));
 }
 
@@ -288,7 +288,7 @@ func testFooterEmpty() {
 func testRender() {
     def out as bytes init render(fixture(), defaults());
     testing.assertTrue(len($out) > 500);
-    def head as string init convert.stringFromBytes(binary.slice($out, 0, 5), "utf-8");
+    def head as string init convert.stringFromBytes("utf-8", binary.slice($out, 0, 5));
     testing.assertEqual($head, "%PDF-");
     testing.assertEqual(pageCount(fixture(), defaults()), 3);
 }
@@ -352,7 +352,7 @@ func testDescribe() {
  */
 func onePixelPng() {
     return encoding.fromText(
+        "base64",
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGMAAQAABQAB" +
-            "lpSm1gAAAABJRU5ErkJggg==",
-        "base64");
+            "lpSm1gAAAABJRU5ErkJggg==");
 }

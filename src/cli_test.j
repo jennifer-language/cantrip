@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 /**
  * White-box tests for the command line.
@@ -337,7 +337,7 @@ func testWritePdf() {
     testing.assertEqual($w.pages, 2);
     def got as bytes init fs.readBytes($target);
     testing.assertEqual(len($got), $w.bytes);
-    testing.assertEqual(convert.stringFromBytes(binary.slice($got, 0, 5), "utf-8"), "%PDF-");
+    testing.assertEqual(convert.stringFromBytes("utf-8", binary.slice($got, 0, 5)), "%PDF-");
 }
 
 /**
@@ -549,6 +549,7 @@ func testRunInfo() {
  */
 func tallPng() {
     return encoding.fromText(
+        "base64",
         "iVBORw0KGgoAAAANSUhEUgAAADwAAAOECAAAAADY5g0rAAAAAmJLR0QA/4ePzL8AAAAH" +
             "dElNRQfqChQQARoWnyFmAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTEwLTIwVDE2OjAx" +
             "OjI2KzAwOjAwPOvwIQAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0xMC0yMFQxNjowMToy" +
@@ -557,8 +558,7 @@ func tallPng() {
             "lmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZ" +
             "lmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZ" +
             "lmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlmVZlh/y" +
-            "AFvEB4eZ6hNNAAAAAElFTkSuQmCC",
-        "base64");
+            "AFvEB4eZ6hNNAAAAAElFTkSuQmCC");
 }
 
 /**
@@ -567,7 +567,7 @@ func tallPng() {
  */
 func onePixelPng() {
     return encoding.fromText(
+        "base64",
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGMAAQAABQAB" +
-            "lpSm1gAAAABJRU5ErkJggg==",
-        "base64");
+            "lpSm1gAAAABJRU5ErkJggg==");
 }

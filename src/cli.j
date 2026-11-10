@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 /**
  * The command line: parse arguments, read the Markdown, write the outputs.
@@ -346,7 +346,7 @@ export func requireSlides(deck as slides.Deck) {
 export func writeHtml(deck as slides.Deck, r as args.Result, target as string) {
     def out as string init htmlout.render($deck, htmlOptions($r));
     fs.writeString($target, $out);
-    return Written{bytes: len(convert.bytesFromString($out, "utf-8")), pages: 0};
+    return Written{bytes: len(convert.bytesFromString("utf-8", $out)), pages: 0};
 }
 
 /**
