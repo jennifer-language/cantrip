@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 /**
  * The slide-deck model: Markdown source in, an ordered deck of slides out.
@@ -18,6 +18,7 @@ use maps;
 use convert;
 
 import "markdown.j" as markdown;
+import "doctree.j" as doctree;
 
 /** The fence that opens and closes a front-matter block. */
 export def const FENCE as string init "---";
@@ -522,16 +523,16 @@ export func tidy(source as string) {
  * @return {Slide} a slide carrying only `title` and `level`
  */
 export func heading(body as string) {
-    def doc as markdown.Node init markdown.parse($body);
-    def found as list of markdown.Node init markdown.findAll($doc, "heading");
+    def doc as doctree.Node init markdown.parse($body);
+    def found as list of doctree.Node init doctree.findAll($doc, "heading");
     if (len($found) == 0) {
         return Slide{number: 0, title: "", level: 0, body: "", notes: ""};
     }
-    def first as markdown.Node init $found[0];
+    def first as doctree.Node init $found[0];
     return Slide{
         number: 0,
-        title: strings.trim(markdown.text($first)),
-        level: markdown.level($first),
+        title: strings.trim(doctree.text($first)),
+        level: doctree.level($first),
         body: "",
         notes: ""
     };

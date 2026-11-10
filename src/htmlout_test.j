@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 /**
  * White-box tests for the HTML slideshow renderer.
@@ -197,7 +197,7 @@ func testHead() {
     testing.assertContains($got, "content=\"A &lt;a@b&gt;\"");
     testing.assertContains($got, "content=\"2026-01-01\"");
     testing.assertContains($got, "content=\"dark\"");
-    testing.assertContains($got, "<title>T &amp; \"Q\"</title>");
+    testing.assertContains($got, "<title>T &amp; &quot;Q&quot;</title>");
     testing.assertContains($got, "<style>");
     testing.assertContains($got, "</head>");
 }

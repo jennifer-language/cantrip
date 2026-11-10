@@ -2,9 +2,9 @@
 
 ## What you need first
 
-The [Jennifer interpreter](https://jennifer-lang.dev/), **0.25.0 or newer**.
-Until 0.25.0 is released that means a development build from Jennifer's `main`
-branch; the 0.24.0 release lacks library functions `cantrip` calls.
+The [Jennifer interpreter](https://jennifer-lang.dev/), **0.26.0 or newer**.
+Until 0.26.0 is released that means a development build from Jennifer's `main`
+branch; the 0.25.0 release lacks the `doctree` module `cantrip` uses.
 `deck.toml` declares that floor, so `jvc check` will tell you if the
 interpreter you have is too old, and every source file carries the same floor
 as a `pragma-jennifer-version` header, so an old interpreter stops with a clear

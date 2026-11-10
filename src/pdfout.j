@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 /**
  * Render a deck as a paginated PDF, one page per slide.
@@ -29,6 +29,7 @@ use lists;
 use convert;
 
 import "markdown.j" as markdown;
+import "doctree.j" as doctree;
 import "pdf.j" as pdf;
 import "./slides.j" as slides;
 import "./theme.j" as theme;
@@ -124,12 +125,12 @@ export func pickStage(deck as slides.Deck, opts as Options) {
 /**
  * Turn a theme colour into a `markdown` fill.
  * @param hex {string} a colour as `#rgb` or `#rrggbb`
- * @return {markdown.Fill} the matching fill
+ * @return {doctree.Fill} the matching fill
  * @throws {Error} kind "theme" when the string is not a hex colour
  */
 export func fill(hex as string) {
     def c as theme.Rgb init theme.hexRgb($hex);
-    return markdown.rgb($c.red, $c.green, $c.blue);
+    return doctree.rgb($c.red, $c.green, $c.blue);
 }
 
 /**
@@ -144,7 +145,7 @@ export func fill(hex as string) {
 export func imageUrls(deck as slides.Deck) {
     def found as list of string init [];
     for (def slide in $deck.slides) {
-        def doc as markdown.Node init markdown.parse($slide.body);
+        def doc as doctree.Node init markdown.parse($slide.body);
         for (def url in collectImages($doc)) {
             if (not lists.contains($found, $url)) {
                 $found[] = $url;
@@ -160,21 +161,21 @@ export func imageUrls(deck as slides.Deck) {
  * `markdown`'s selectors match direct children, and an image sits at
  * whatever depth its paragraph, list, or table cell puts it, so this recurses
  * rather than asking for a fixed path.
- * @param node {markdown.Node} the subtree to walk
+ * @param node {doctree.Node} the subtree to walk
  * @return {list of string} the `src` of every image below `node`, in order
  */
-export func collectImages(node as markdown.Node) {
+export func collectImages(node as doctree.Node) {
     def found as list of string init [];
-    if (markdown.typeOf($node) == "image") {
-        def src as string init markdown.attr($node, "href");
+    if (doctree.typeOf($node) == "image") {
+        def src as string init doctree.attr($node, "href");
         if ($src == "") {
-            $src = markdown.attr($node, "src");
+            $src = doctree.attr($node, "src");
         }
         if ($src != "") {
             $found[] = $src;
         }
     }
-    for (def child in markdown.children($node)) {
+    for (def child in doctree.children($node)) {
         for (def deeper in collectImages($child)) {
             $found[] = $deeper;
         }
@@ -190,13 +191,13 @@ export func collectImages(node as markdown.Node) {
  * rather than a title.
  * @param deck {slides.Deck} the deck being rendered, for its metadata
  * @param opts {Options} the caller's options
- * @return {markdown.PdfOptions} options ready for `markdown.renderPdfDoc`
+ * @return {doctree.PdfOptions} options ready for `doctree.renderPdfDoc`
  * @throws {Error} kind "theme" when the theme or ratio name is unknown
  */
 export func layout(deck as slides.Deck, opts as Options) {
     def t as theme.Theme init pickTheme($deck, $opts);
     def s as theme.Stage init pickStage($deck, $opts);
-    def out as markdown.PdfOptions init markdown.pdfDefaults();
+    def out as doctree.PdfOptions init doctree.pdfDefaults();
     $out.pageWidth = shrink($s.pageWidth);
     $out.pageHeight = shrink($s.pageHeight);
     $out.margin = MARGIN;
@@ -315,8 +316,8 @@ export func footer(deck as slides.Deck, opts as Options) {
  */
 export func document(deck as slides.Deck, opts as Options) {
     def source as string init slides.kbdToCode(slides.toMarkdown($deck, $opts.notes));
-    def tree as markdown.Node init markdown.parse($source);
-    def laid as pdf.Document init markdown.renderPdfDoc($tree, layout($deck, $opts));
+    def tree as doctree.Node init markdown.parse($source);
+    def laid as pdf.Document init doctree.renderPdfDoc($tree, layout($deck, $opts));
     def doc as pdf.Document init magnify($laid, pickStage($deck, $opts));
     def label as pdf.PageLabel init footer($deck, $opts);
     if ($label.left != "" or $label.right != "") {

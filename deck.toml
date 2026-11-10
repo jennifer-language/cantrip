@@ -13,4 +13,4 @@ homepage = "https://github.com/jennifer-language/cantrip"
 manual = "https://jennifer-language.github.io/cantrip/"
 
 [engines]
-jennifer = ">=0.25.0"
+jennifer = ">=0.26.0"

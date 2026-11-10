@@ -17,9 +17,9 @@ permissions:
 env:
   # The interpreter CI runs against: a release (X.Y.Z, installed from its
   # checksummed .deb) or a commit of Jennifer's main branch (built with Go).
-  # cantrip calls library functions first released in 0.25.0 - the floor in
-  # deck.toml - so until 0.25.0 is published CI pins the main-branch commit the
-  # project was last verified against. Switch this to "0.25.0" once it ships;
+  # cantrip calls library functions first released in 0.26.0 - the floor in
+  # deck.toml - so until 0.26.0 is published CI pins the main-branch commit the
+  # project was last verified against. Switch this to "0.26.0" once it ships;
   # bumping it is how the project moves to a newer language. Not named
   # JENNIFER: scripts/check.sh reads that as the path of the interpreter to run.
   JENNIFER_REF: "7e63a503ed75335ffc6da60128a95684cfa45678"
