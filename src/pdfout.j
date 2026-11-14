@@ -312,7 +312,7 @@ export func footer(deck as slides.Deck, opts as Options) {
  * @param opts {Options} how to render it
  * @return {pdf.Document} the laid-out, scaled, footed document
  * @throws {Error} kind "theme" when the theme or ratio name is unknown
- * @throws {Error} kind "markdown" when a document exceeds the parser's budget
+ * @throws {Error} kind "limit" when a document exceeds the parser's budget
  */
 export func document(deck as slides.Deck, opts as Options) {
     def source as string init slides.kbdToCode(slides.toMarkdown($deck, $opts.notes));
@@ -332,7 +332,7 @@ export func document(deck as slides.Deck, opts as Options) {
  * @param opts {Options} how to render it
  * @return {bytes} the finished PDF
  * @throws {Error} kind "theme" when the theme or ratio name is unknown
- * @throws {Error} kind "markdown" when a document exceeds the parser's budget
+ * @throws {Error} kind "limit" when a document exceeds the parser's budget
  */
 export func render(deck as slides.Deck, opts as Options) {
     return pdf.render(document($deck, $opts));
