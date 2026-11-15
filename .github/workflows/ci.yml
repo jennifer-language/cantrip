@@ -22,7 +22,7 @@ env:
   # project was last verified against. Switch this to "0.26.0" once it ships;
   # bumping it is how the project moves to a newer language. Not named
   # JENNIFER: scripts/check.sh reads that as the path of the interpreter to run.
-  JENNIFER_REF: "7e63a503ed75335ffc6da60128a95684cfa45678"
+  JENNIFER_REF: "4f6ac6f609e20e91c069415b687576813458cb15"
 
 jobs:
   check:
