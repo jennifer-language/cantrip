@@ -159,8 +159,8 @@ export func body(slide as slides.Slide, opts as Options) {
 /**
  * Restore `<kbd>` key caps that the Markdown renderer escaped.
  *
- * The renderer escapes every inline tag - even with raw HTML allowed, which
- * covers block HTML only - so `<kbd>s</kbd>` would show its own tags. A key
+ * Unless raw HTML is allowed the renderer escapes every inline tag, so
+ * `<kbd>s</kbd>` would show its own tags. A key
  * cap is the one inline element a slide about software keeps needing, and an
  * attribute-free `<kbd>` can carry no script, so exactly the escaped
  * `&lt;kbd&gt;` and `&lt;/kbd&gt;` become tags again. Text inside a `<code>`
@@ -246,14 +246,17 @@ export func label(slide as slides.Slide) {
  * @return {string} the `<div id="overview">` element, hidden by default
  */
 export func overview(deck as slides.Deck) {
-    def out as string init "<div id=\"overview\" hidden aria-label=\"Slide overview\">";
+    # Collected and joined once: growing one string per slide copied the
+    # whole grid on every pass, quadratic in the slide count.
+    def parts as list of string init ["<div id=\"overview\" hidden aria-label=\"Slide overview\">"];
     for (def slide in $deck.slides) {
-        $out = $out + "<div class=\"thumb\" tabindex=\"0\" role=\"button\" data-go=\"" +
+        $parts[] = "<div class=\"thumb\" tabindex=\"0\" role=\"button\" data-go=\"" +
             convert.toString($slide.number) + "\"><div class=\"n\">" +
             convert.toString($slide.number) + "</div><div class=\"t\">" +
             html.escape(label($slide)) + "</div></div>";
     }
-    return $out + "</div>";
+    $parts[] = "</div>";
+    return strings.join($parts, "");
 }
 
 /**
