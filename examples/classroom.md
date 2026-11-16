@@ -15,7 +15,7 @@ lang: en
 
 ![Jennifer](jennifer-logo.png)
 
-A small language that shows its work.
+A modern interpreted language that explains itself.
 
 > It also suits teaching and learning: an interactive REPL, an easy-to-read
 > grammar, and token and AST dumps show what an interpreter does at each stage,
@@ -85,7 +85,7 @@ int, got float" rather than silently dropping the fraction.
 
 ---
 
-## A linter that explains itself
+## A linter that says what and why
 
 ```text
 $ jennifer lint average.j

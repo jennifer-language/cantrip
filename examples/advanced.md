@@ -15,14 +15,18 @@ lang: en
 
 ![Jennifer](jennifer-logo.png)
 
-Concurrency, errors, profiling, memory and speed.
+A highly optimized interpreted programming language, and how to get even
+more speed out of it: concurrency, errors, profiling, memory.
 
 Based on **Jennifer 0.26.0**, November 2026.
 
 <!-- notes:
 The classroom talk showed how Jennifer explains itself. This one is for people
-who already write it: how to run work in parallel, how to handle failure by
-kind, and how to find and fix the slow part of a program. Every number on these
+who already write it. The interpreter already does a lot on its own: read-only
+parameters are borrowed instead of copied, a mutate-and-return helper updates
+in place, call frames are pooled, names are resolved before the program runs.
+The rest of the speed is in how you write the program: running work in
+parallel, handling failure by kind, and finding and fixing the slow part. Every number on these
 slides was measured with Jennifer 0.26.0 on an 8-core laptop; your figures will
 differ, the shapes will not.
 -->
