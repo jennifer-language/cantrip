@@ -153,6 +153,11 @@ jobs:
           git clone --depth 1 https://github.com/jennifer-language/grimoire.git /tmp/grimoire
           /tmp/grimoire/bin/grimoire build --config grimoire.toml --pdf
           ./bin/cantrip build examples/sample.md --out docs-site/sample
+          # A talk published in its own directory, /cantrip/classroom/.
+          mkdir -p docs-site/classroom
+          ./bin/cantrip build examples/classroom.md --out docs-site/classroom/index
+          mkdir -p docs-site/advanced
+          ./bin/cantrip build examples/advanced.md --out docs-site/advanced/index
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

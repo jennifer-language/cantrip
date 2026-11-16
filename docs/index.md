@@ -53,6 +53,20 @@ The published copy is built from that file on every push:
   <kbd>?</kbd> for the shortcuts, <kbd>o</kbd> for the overview
 - [the PDF](https://jennifer-language.github.io/cantrip/sample.pdf)
 
+A real talk, built the same way from `examples/classroom.md`:
+[Jennifer for the classroom](https://jennifer-language.github.io/cantrip/classroom/)
+([PDF](https://jennifer-language.github.io/cantrip/classroom/index.pdf)), on
+why Jennifer suits teaching and learning programming: a REPL, token and AST
+dumps, a linter, a profiler, tests, and strict rules that turn mistakes into
+clear messages. Press <kbd>s</kbd> for the speaker notes, which tell the story.
+
+Its follow-up, from `examples/advanced.md`:
+[Advanced programming with Jennifer](https://jennifer-language.github.io/cantrip/advanced/)
+([PDF](https://jennifer-language.github.io/cantrip/advanced/index.pdf)), on
+concurrency with `spawn`, tasks and channels, `try` / `catch` and error kinds,
+the profiler and its allocation view, when a value is copied or borrowed, and
+performance tuning, with figures measured on Jennifer 0.26.0.
+
 ## Where to go next
 
 | | |
