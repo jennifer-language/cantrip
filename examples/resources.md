@@ -83,7 +83,7 @@ you can read and fork.
 
 ---
 
-## jvc: the deck manager
+## jvc: the package manager
 
 ```sh
 jvc add "@deckyard/epub"          # require a deck
@@ -106,7 +106,7 @@ repository plus `jvc publish`; the registry reads the tagged commit itself.
 
 ---
 
-## The registry
+## The public package registry
 
 [registry.jennifer-lang.dev](https://registry.jennifer-lang.dev/browse): 65+
 decks, searchable, each with its versions, documentation and repository.
@@ -197,7 +197,7 @@ jvc add "@deckyard/geo" && jvc install         # your first deck
 
 - Learn: [docs.jennifer-lang.dev](https://docs.jennifer-lang.dev/)
 - Find a deck: [registry.jennifer-lang.dev](https://registry.jennifer-lang.dev/)
-- Share one: `jvc publish`, then ask Deckyard to review it
+- Share one: `jvc publish`
 
 <!-- notes:
 Three commands get you from nothing to a working setup: the REPL to try the
