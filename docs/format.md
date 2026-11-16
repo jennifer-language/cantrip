@@ -67,8 +67,9 @@ swallow the deck.
 | `date` | an HTML `date` meta tag | none |
 | `theme` | which [theme](themes.md) to render with | `plain` |
 | `ratio` | which [aspect ratio](themes.md#ratios) to lay out on | `16:9` |
-| `subject` | the PDF subject | none |
-| `keywords` | the PDF keywords | none |
+| `description` | the HTML `description` meta tag, what a search engine shows | the `subject` |
+| `subject` | the PDF subject, and the HTML description when there is no `description` | none |
+| `keywords` | the PDF keywords and the HTML `keywords` meta tag | none |
 | `transition` | which [slide transition](themes.md#transitions) the HTML uses | `fade` |
 | `lang` | the HTML `lang` attribute | `en` |
 

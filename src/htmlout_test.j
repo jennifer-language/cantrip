@@ -209,6 +209,21 @@ func testHeadWithoutMetadata() {
     testing.assertContains($got, "<title>Slides</title>");
     testing.assertFalse(strings.contains($got, "name=\"author\""));
     testing.assertFalse(strings.contains($got, "name=\"date\""));
+    testing.assertFalse(strings.contains($got, "name=\"description\""));
+    testing.assertFalse(strings.contains($got, "name=\"keywords\""));
+}
+
+/** `description` and `keywords` become meta tags; `subject` stands in for a missing description. */
+func testHeadSearchMetadata() {
+    def own as slides.Deck init slides.parse("---\ndescription: Why <this>\nsubject: S\n" +
+        "keywords: a, b\n---\n# X\n");
+    def got as string init head($own, theme.theme("plain"), theme.stage("16:9"));
+    testing.assertContains($got, "<meta name=\"description\" content=\"Why &lt;this&gt;\">");
+    testing.assertContains($got, "<meta name=\"keywords\" content=\"a, b\">");
+    def fallback as slides.Deck init slides.parse("---\nsubject: From the PDF\n---\n# X\n");
+    testing.assertContains(
+        head($fallback, theme.theme("plain"), theme.stage("16:9")),
+        "<meta name=\"description\" content=\"From the PDF\">");
 }
 
 /** The colour scheme follows the theme's polarity. */

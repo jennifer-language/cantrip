@@ -277,6 +277,19 @@ export func head(deck as slides.Deck, t as theme.Theme, s as theme.Stage) {
     if (strings.trim($deck.date) != "") {
         $out = $out + "<meta name=\"date\" content=\"" + attrValue($deck.date) + "\">";
     }
+    # What a search engine shows under the title: `description`, else the PDF's
+    # `subject`, so one key serves both outputs.
+    def description as string init strings.trim(slides.metaOr(
+        $deck.meta,
+        "description",
+        slides.metaOr($deck.meta, "subject", "")));
+    if ($description != "") {
+        $out = $out + "<meta name=\"description\" content=\"" + attrValue($description) + "\">";
+    }
+    def keywords as string init strings.trim(slides.metaOr($deck.meta, "keywords", ""));
+    if ($keywords != "") {
+        $out = $out + "<meta name=\"keywords\" content=\"" + attrValue($keywords) + "\">";
+    }
     $out = $out + "<meta name=\"color-scheme\" content=\"" + colorScheme($t) + "\">";
     $out = $out + "<title>" + html.escape($title) + "</title>";
     $out = $out + "<style>" + theme.css($t, $s) + "</style></head>";
