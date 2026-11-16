@@ -13,6 +13,8 @@ lang: en
 
 # Advanced programming with Jennifer
 
+![Jennifer](jennifer-logo.png)
+
 Concurrency, errors, profiling, memory and speed.
 
 Based on **Jennifer 0.26.0**, November 2026.

@@ -13,6 +13,8 @@ lang: en
 
 # Jennifer for the classroom
 
+![Jennifer](jennifer-logo.png)
+
 A small language that shows its work.
 
 > It also suits teaching and learning: an interactive REPL, an easy-to-read
