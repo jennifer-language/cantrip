@@ -580,7 +580,9 @@ export func dispatch(verb as string, files as list of string, r as args.Result) 
         warnOverflow($deck, $w.pages);
         return OK;
     }
-    # build: both, sharing one parse and one base stem.
+    # build: both, sharing one parse and one base stem. The PDF's own flags are
+    # read first, so a bad one fails the run before the HTML half is written.
+    pdfOptions($r);
     def base as string init stem($files[0]);
     if (strings.trim($given) != "") {
         $base = strings.trim($given);

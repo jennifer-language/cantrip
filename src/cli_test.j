@@ -537,6 +537,16 @@ func testRunBuild() {
     testing.assertTrue(fs.isFile(stem($target) + ".pdf"));
 }
 
+/** A bad `--bookmarks` stops `build` before it writes the HTML half. */
+func testRunBuildBadBookmarksWritesNothing() {
+    def target as string init writeDeck(sample(), "deck.md");
+    testing.assertEqual(run(["cantrip", "build", $target, "--bookmarks", "x"]), FAILED);
+    testing.assertFalse(fs.exists(stem($target) + ".html"));
+    testing.assertFalse(fs.exists(stem($target) + ".pdf"));
+    testing.assertEqual(run(["cantrip", "build", $target, "--bookmarks", "1"]), OK);
+    testing.assertTrue(fs.isFile(stem($target) + ".html"));
+}
+
 /** `info` through the whole run reports success. */
 func testRunInfo() {
     def target as string init writeDeck(sample(), "deck.md");
