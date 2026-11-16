@@ -83,7 +83,7 @@ you can read and fork.
 
 ---
 
-## jvc: the package manager
+## jvc: the package & app manager
 
 ```sh
 jvc add "@deckyard/epub"          # require a deck
