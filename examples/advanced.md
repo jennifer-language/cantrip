@@ -261,7 +261,7 @@ for (def i in 0..$n) {
 | 20,000 | 976 ms | 68 ms |
 | 40,000 | 4,872 ms | 101 ms |
 
-Twice the lines, five times the time: quadratic.
+Twice the lines, five times the time: quadratic, O(n²).
 
 <!-- notes:
 Values are copied, not shared, so `$out + "line\n"` builds a new string that

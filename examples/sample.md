@@ -116,8 +116,8 @@ names, each light and dark, so a talk can wear the look of its docs:
 | `theme = "nordic"` | `theme: nordic` or `theme: nordic-dark` |
 | `theme = "terminal"` | `theme: terminal` or `theme: terminal-dark` |
 
-`cantrip themes` lists all 24. This deck wears `grimoire-dark`, like the manual
-it came with.
+`cantrip themes` lists all 24. The manual this deck comes with wears
+`obsidian`, so a talk beside it would wear `obsidian` or `obsidian-dark`.
 
 <!-- notes:
 Try `cantrip build examples/sample.md --theme nordic` to show the same deck

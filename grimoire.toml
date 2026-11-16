@@ -10,7 +10,7 @@ out = "docs-site"
 clean = true
 
 [html]
-theme = "grimoire"
+theme = "obsidian"
 mode = "auto"
 navPosition = "left"
 tocPosition = "right"
