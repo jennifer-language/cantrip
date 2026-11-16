@@ -120,7 +120,18 @@ a [Grimoire](https://grimoire.jennifer-lang.dev/) book, built with
 | [Themes, ratios, and transitions](docs/themes.md) | the themes, Grimoire's included, and how the PDF differs |
 | [Working on Cantrip](docs/development.md) | the layout, the gate, the release process |
 
-`examples/sample.md` is a worked deck that documents the format by being it.
+## Example presentations
+
+Three decks in `examples/`, built and published on every push:
+
+| Deck | Theme, transition | About |
+| --- | --- | --- |
+| [Cantrip](https://jennifer-language.github.io/cantrip/sample.html) ([PDF](https://jennifer-language.github.io/cantrip/sample.pdf)) | nordic, fade | the slide format, documented by being it (`examples/sample.md`) |
+| [Jennifer for the classroom](https://jennifer-language.github.io/cantrip/classroom/) ([PDF](https://jennifer-language.github.io/cantrip/classroom/index.pdf)) | carbon, slide | why Jennifer suits teaching: REPL, token and AST dumps, linter, formatter, profiler, tests, strict rules (`examples/classroom.md`) |
+| [Advanced programming with Jennifer](https://jennifer-language.github.io/cantrip/advanced/) ([PDF](https://jennifer-language.github.io/cantrip/advanced/index.pdf)) | ivy, zoom | concurrency, try / catch and error kinds, defer, profiling, copies and borrows, performance (`examples/advanced.md`) |
+
+Press <kbd>s</kbd> in a slideshow for the speaker notes, <kbd>?</kbd> for the
+shortcuts.
 
 ## Tests
 

@@ -2,9 +2,9 @@
 title: Cantrip
 author: mplx
 date: 2026-10-10
-theme: grimoire-dark
+theme: nordic
 ratio: 16:9
-transition: slide
+transition: fade
 subject: A worked example deck
 keywords: jennifer, slides, markdown
 lang: en
