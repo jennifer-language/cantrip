@@ -156,8 +156,15 @@ place on a slide.
 | Attribute lists | `## Title {#anchor .class}` |
 | Key caps | `<kbd>Esc</kbd>` |
 
-Not supported: reference links (`[text][ref]`), setext headings, and bare
-unbracketed URLs in prose. For anything beyond the subset, pre-render it.
+Reference links (`[text][ref]`) work when the `[ref]: url` definition is on
+the same slide. A setext heading works with an `===` underline only, since a
+`---` underline is a slide separator. Not supported: bare unbracketed URLs in
+prose. For anything beyond the subset, pre-render it.
+
+The PDF is drawn in the standard PDF fonts, which cover Western European
+text (Windows-1252). Any other character, such as Greek, Cyrillic, CJK, or an
+emoji, prints as `?` on the page, in the running footer too; the PDF's
+metadata and bookmarks keep it as written. The HTML shows every character.
 
 ### A fenced block's language survives
 
@@ -175,8 +182,10 @@ nothing from a CDN.
 
 `![alt](fig.png)` works in both outputs, with one difference worth knowing.
 
-In the **HTML** the `src` is written through untouched, so a relative path has
-to be valid relative to wherever you serve or open the HTML from.
+In the **HTML** the `src` is written as it is, so a relative path has to be
+valid relative to wherever you serve or open the HTML from. Only a relative
+path or an `http`, `https`, or `mailto` URL is kept; any other scheme
+(`javascript:`, `data:`, ...) becomes `#`, for images and links alike.
 
 In the **PDF** the picture has to be read off disk, and `cantrip` looks for it
 twice: as written, then relative to the directory the deck came from. So
@@ -184,6 +193,11 @@ twice: as written, then relative to the directory the deck came from. So
 and any `http://`, `https://`, `data:` or `//` URL, falls back to the image's
 alt text in square brackets - a missing picture should not cost you the deck.
 `--verbose` names each one it skipped.
+
+The PDF reads whatever path the deck names, an absolute path or one with
+`..` in it included, as long as the file is a PNG, JPEG, or GIF that you can
+read. So a deck from somebody else can pull any picture on your machine into
+the PDF it builds; read such a deck before you build and share its PDF.
 
 Only a paragraph that is a single image is drawn into the PDF. An image inline
 in a sentence, in a list item, in a quote, or in a table cell keeps the `[alt]`
@@ -194,15 +208,15 @@ fallback.
 Raw HTML in the source renders as visible text, not markup. That is the right
 default for a tool that may be pointed at a deck somebody else wrote: it closes
 the obvious injection route. For your own deck, `--raw-html` opts back into
-verbatim passthrough in the HTML output - for **block** HTML, such as a `<div>`
-on lines of its own. Inline tags inside a paragraph stay escaped either way;
-that is how the interpreter's Markdown renderer works. The PDF renderer has no
-HTML at all.
+verbatim passthrough in the HTML output, for block HTML such as a `<div>` on
+lines of its own and for inline tags inside a paragraph alike. Speaker notes
+stay escaped either way. The PDF renderer has no HTML at all.
 
 The one exception is the key cap. `<kbd>Esc</kbd>` renders as a key in the
-slideshow and as the key's name in the PDF, with or without `--raw-html`. Only
-the bare tag is recognised - one with attributes stays text - and inside a code
-span or a fenced block it stays as written, so you can still show it as code.
+slideshow and as the key's name in the PDF, with or without `--raw-html`.
+Without `--raw-html` only the bare tag is recognised - one with attributes stays
+text - and inside a code span or a fenced block it stays as written, so you can
+still show it as code.
 
 ## Several files, one deck
 
@@ -228,3 +242,7 @@ That is a prompt to split the slide, not an error - the PDF is still correct and
 complete. The count comes from the PDF that was written, so a slide pushed over
 by a tall picture is caught too. Warnings and errors go to stderr, so they still
 show when you redirect the `wrote ...` lines.
+
+A level-1 heading (`#`) below other content on a slide also starts a new PDF
+page, because the PDF layout opens a page for every top-level heading. Keep a
+slide to one `#` heading, at its top, and use `##` and below for the rest.

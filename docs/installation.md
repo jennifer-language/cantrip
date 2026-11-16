@@ -83,7 +83,7 @@ cd cantrip
 ```
 
 There are no third-party dependencies to fetch: everything `cantrip` imports
-(`markdown`, `pdf`, `html`, `args`, `docblock`) ships with the interpreter, so
+(`markdown`, `doctree`, `pdf`, `html`, `args`) ships with the interpreter, so
 `deck.toml` has no `[decks]` table and `jvc install` has nothing to vendor.
 
 ## Checking the install

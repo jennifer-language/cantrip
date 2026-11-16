@@ -15,7 +15,7 @@ One command with five verbs. `cantrip --help` prints the same list, and
 | `html` | the slideshow only | `<input>.html` |
 | `pdf` | the printable deck only | `<input>.pdf` |
 | `info` | report the deck's shape | nothing |
-| `themes` | list the themes and ratios | nothing |
+| `themes` | list the themes, ratios, and transitions | nothing |
 
 ```sh
 cantrip build talk.md              # talk.html and talk.pdf

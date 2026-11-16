@@ -89,7 +89,7 @@ cd cantrip
 | `html` | the slideshow only |
 | `pdf` | the printable deck only |
 | `info` | report the deck's shape, writing nothing |
-| `themes` | list the themes and ratios |
+| `themes` | list the themes, ratios, and transitions |
 
 ```sh
 cantrip html talk.md --no-notes -o public/talk.html   # for the attendees
