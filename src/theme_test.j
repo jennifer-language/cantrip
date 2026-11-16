@@ -209,6 +209,22 @@ func testCssCarriesHeadingAndRadius() {
     testing.assertContains($out, "color: var(--heading);");
 }
 
+/**
+ * The help overlay and the notes panel are dark in every theme, so their key
+ * caps and code spans carry their own light text colour instead of the
+ * theme's code colour, which is dark in a light theme.
+ */
+func testOverlaysSetTheirOwnTextColour() {
+    for (def name in ["plain", "sepia", "carbon-dark"]) {
+        def out as string init css(theme($name), stage("16:9"));
+        def at as int init strings.indexOf($out, '#help kbd {');
+        testing.assertTrue($at >= 0);
+        def rule as string init strings.substring($out, $at, strings.indexOf($out, '}', $at));
+        testing.assertContains($rule, "color: #e6e8ee;");
+        testing.assertContains($out, '#notes code, #notes kbd {');
+    }
+}
+
 /** Every transition has its rules, and reduced motion turns them all off. */
 func testCssCoversTransitions() {
     def out as string init css(theme("plain"), stage("16:9"));

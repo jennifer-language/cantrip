@@ -1044,6 +1044,12 @@ dd { margin: 0 0 0.5em 1.4em; }
     letter-spacing: 0.08em;
 }
 #notes p { font-size: 16px; }
+#notes code, #notes kbd {
+    background: #23262f;
+    color: #e6e8ee;
+    border-color: #3a3f4b;
+}
+#notes a { color: #8ab4ff; }
 
 #help {
     position: fixed;
@@ -1059,9 +1065,13 @@ dd { margin: 0 0 0.5em 1.4em; }
 #help[hidden] { display: none; }
 #help table { border-collapse: collapse; }
 #help td { border: 0; padding: 6px 18px 6px 0; font-size: 17px; }
+/* The help overlay and the notes panel are always dark, whatever the theme,
+   so everything inside them sets its own colours: a key cap or code span that
+   inherited the code colours of the theme would be dark on dark in a light theme. */
 #help kbd {
     font-family: %monofont%;
     background: #23262f;
+    color: #e6e8ee;
     border: 1px solid #3a3f4b;
     border-radius: 4px;
     padding: 2px 7px;
