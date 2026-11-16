@@ -67,6 +67,12 @@ concurrency with `spawn`, tasks and channels, `try` / `catch` and error kinds,
 the profiler and its allocation view, when a value is copied or borrowed, and
 performance tuning, with figures measured on Jennifer 0.26.0.
 
+And a map of the ecosystem, from `examples/resources.md`:
+[Jennifer resources](https://jennifer-language.github.io/cantrip/resources/)
+([PDF](https://jennifer-language.github.io/cantrip/resources/index.pdf)): the
+interpreter, jvc, the deck registry, the curated Deckyard decks, the apps and
+the demos.
+
 ## Where to go next
 
 | | |

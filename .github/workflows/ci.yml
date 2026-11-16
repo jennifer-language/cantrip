@@ -158,6 +158,13 @@ jobs:
           ./bin/cantrip build examples/classroom.md --out docs-site/classroom/index
           mkdir -p docs-site/advanced
           ./bin/cantrip build examples/advanced.md --out docs-site/advanced/index
+          mkdir -p docs-site/resources
+          ./bin/cantrip build examples/resources.md --out docs-site/resources/index
+          # The HTML keeps an image's path as written, so the logo sits beside
+          # each deck that shows it.
+          for d in classroom advanced resources; do
+            cp examples/jennifer-logo.png docs-site/$d/
+          done
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
