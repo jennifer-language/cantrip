@@ -284,6 +284,20 @@ func testFooterEmpty() {
     testing.assertEqual($got.right, "");
 }
 
+/**
+ * A title or footer the standard fonts cannot draw still renders: the footer
+ * shows a substitute instead of the whole PDF failing to encode.
+ */
+func testFooterOutsideWinAnsi() {
+    def deck as slides.Deck init slides.parse("---\ntitle: Café 日本\n---\n# 日本\n");
+    testing.assertEqual(footer($deck, defaults()).left, "Café ??");
+    testing.assertTrue(len(render($deck, defaults())) > 500);
+    def opts as Options init defaults();
+    $opts.footer = "Ελλάδα ok";
+    testing.assertEqual(footer($deck, $opts).left, "?????? ok");
+    testing.assertTrue(len(render($deck, $opts)) > 500);
+}
+
 /** A rendered deck is a PDF of one page per slide. */
 func testRender() {
     def out as bytes init render(fixture(), defaults());

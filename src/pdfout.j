@@ -25,7 +25,7 @@
  */
 
 use strings;
-use lists;
+use maps;
 use convert;
 
 import "markdown.j" as markdown;
@@ -144,10 +144,12 @@ export func fill(hex as string) {
  */
 export func imageUrls(deck as slides.Deck) {
     def found as list of string init [];
+    def seen as map of string to bool init {};
     for (def slide in $deck.slides) {
         def doc as doctree.Node init markdown.parse($slide.body);
         for (def url in collectImages($doc)) {
-            if (not lists.contains($found, $url)) {
+            if (not maps.has($seen, $url)) {
+                $seen[$url] = true;
                 $found[] = $url;
             }
         }
@@ -160,22 +162,25 @@ export func imageUrls(deck as slides.Deck) {
  *
  * `markdown`'s selectors match direct children, and an image sits at
  * whatever depth its paragraph, list, or table cell puts it, so this recurses
- * rather than asking for a fixed path.
+ * rather than asking for a fixed path. It reads the node's fields rather than
+ * calling `doctree.typeOf` and `doctree.children`: each call into `doctree`
+ * rebuilds the node it is handed, which made the walk the costliest part of
+ * the PDF's image scan.
  * @param node {doctree.Node} the subtree to walk
  * @return {list of string} the `src` of every image below `node`, in order
  */
 export func collectImages(node as doctree.Node) {
     def found as list of string init [];
-    if (doctree.typeOf($node) == "image") {
-        def src as string init doctree.attr($node, "href");
-        if ($src == "") {
-            $src = doctree.attr($node, "src");
+    if ($node.kind == "image") {
+        def src as string init $node.url;
+        if ($src == "" and maps.has($node.attrs, "src")) {
+            $src = $node.attrs["src"];
         }
         if ($src != "") {
             $found[] = $src;
         }
     }
-    for (def child in doctree.children($node)) {
+    for (def child in $node.children) {
         for (def deeper in collectImages($child)) {
             $found[] = $deeper;
         }
@@ -283,6 +288,10 @@ export func magnify(doc as pdf.Document, s as theme.Stage) {
 
 /**
  * The running footer: the deck's own label on the left, pages on the right.
+ *
+ * The label is drawn in a standard font, which encodes only WinAnsi, so a
+ * character outside it becomes `?` the way body text does; left as written it
+ * would fail the whole PDF.
  * @param deck {slides.Deck} the deck being rendered
  * @param opts {Options} the caller's options
  * @return {pdf.PageLabel} the footer to attach, blank when both halves are off
@@ -293,7 +302,7 @@ export func footer(deck as slides.Deck, opts as Options) {
     if ($left == "") {
         $left = strings.trim($deck.title);
     }
-    $out.left = $left;
+    $out.left = pdf.toWinAnsi($left, "?");
     if ($opts.numbers) {
         $out.right = "%page% / %pages%";
     }
