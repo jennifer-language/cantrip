@@ -2,7 +2,7 @@
 title: Advanced programming with Jennifer
 author: mplx
 date: 2026-11
-theme: ivy
+theme: carbon-dark
 ratio: 16:9
 transition: zoom
 description: Advanced programming with the Jennifer programming language: concurrency with spawn, tasks and channels, try/catch and error kinds, profiling, when values are copied or borrowed, and performance tuning. Based on Jennifer 0.26.0.

@@ -2,7 +2,7 @@
 title: Cantrip
 author: mplx
 date: 2026-10-10
-theme: nordic
+theme: plain
 ratio: 16:9
 transition: fade
 subject: A worked example deck
