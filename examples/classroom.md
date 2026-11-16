@@ -83,58 +83,6 @@ int, got float" rather than silently dropping the fraction.
 
 ---
 
-## Tokens: what the lexer sees
-
-```text
-$ jennifer tokens hello.j
-2:1   DEF
-2:5   IDENT     "n"
-2:7   AS
-2:10  INT_TYPE
-2:14  INIT
-2:19  INT       "2"
-2:21  PLUS
-2:23  INT       "3"
-2:24  SEMI
-```
-
-The first stage of every interpreter, with line and column for each token.
-
-<!-- notes:
-For a course on how languages work, this is the first exhibit. The source line
-`def n as int init 2 + 3;` becomes a stream of tokens, each with its position.
-Students can see that whitespace is gone, that `2` is an INT with the text "2",
-and that every later error message gets its line and column from here.
--->
-
----
-
-## The AST: what the parser builds
-
-```text
-$ jennifer ast hello.j
-"init": {
-  "type": "BinaryExpr",
-  "line": 2, "col": 19,
-  "op": "+",
-  "left":  { "type": "IntLit", "value": 2 },
-  "right": { "type": "IntLit", "value": 3 }
-}
-```
-
-The same line as a tree, as JSON, ready for any tool to read.
-
-<!-- notes:
-The second stage. The flat token stream becomes a tree: a definition whose
-initial value is a binary expression, plus, with two integer literals under it.
-This is the moment precedence and nesting become visible. Because the dump is
-JSON, students can write their own small tools over it: count nodes, find every
-call, draw the tree. (The real output has a few more fields per node; they are
-trimmed here.)
--->
-
----
-
 ## A linter that explains itself
 
 ```text
@@ -328,6 +276,59 @@ Pull the thread together. Lexer, parser, linter, runtime and tests all report
 the same way: position, reason, the source line, a caret. Students learn to
 read one format and it works everywhere. And because the design is strict, the
 mistakes that other languages let through quietly become one of these messages.
+-->
+
+---
+
+## Tokens: what the lexer sees
+
+```text
+$ jennifer tokens hello.j
+2:1   DEF
+2:5   IDENT     "n"
+2:7   AS
+2:10  INT_TYPE
+2:14  INIT
+2:19  INT       "2"
+2:21  PLUS
+2:23  INT       "3"
+2:24  SEMI
+```
+
+The first stage of every interpreter, with line and column for each token.
+
+<!-- notes:
+An optional look under the hood, for older students or a course on how
+languages work; skip these two slides for beginners. This is the first exhibit. The source line
+`def n as int init 2 + 3;` becomes a stream of tokens, each with its position.
+Students can see that whitespace is gone, that `2` is an INT with the text "2",
+and that every later error message gets its line and column from here.
+-->
+
+---
+
+## The AST: what the parser builds
+
+```text
+$ jennifer ast hello.j
+"init": {
+  "type": "BinaryExpr",
+  "line": 2, "col": 19,
+  "op": "+",
+  "left":  { "type": "IntLit", "value": 2 },
+  "right": { "type": "IntLit", "value": 3 }
+}
+```
+
+The same line as a tree, as JSON, ready for any tool to read.
+
+<!-- notes:
+The second stage. The flat token stream becomes a tree: a definition whose
+initial value is a binary expression, plus, with two integer literals under it.
+This is the moment precedence and nesting become visible. Because the dump is
+JSON, students can write their own small tools over it: count nodes, find every
+call, draw the tree. (The real output has a few more fields per node; they are
+trimmed here.)
 -->
 
 ---
