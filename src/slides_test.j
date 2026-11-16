@@ -333,6 +333,16 @@ func testParse() {
     testing.assertEqual($deck.slides[1].level, 2);
 }
 
+/** A byte-order mark, as some editors save one, hides neither the front matter nor a heading. */
+func testParseSkipsByteOrderMark() {
+    def deck as Deck init parse("\uFEFF---\ntitle: T\ntheme: midnight\n---\n# One\n");
+    testing.assertEqual($deck.title, "T");
+    testing.assertEqual($deck.theme, "midnight");
+    testing.assertEqual(len($deck.slides), 1);
+    testing.assertEqual($deck.slides[0].title, "One");
+    testing.assertEqual(parse(BOM + "# Bare\n").slides[0].title, "Bare");
+}
+
 /** With no `title:` the deck borrows the first slide's heading. */
 func testParseBorrowsTitle() {
     def deck as Deck init parse("# Borrowed\n\n---\n\n# Later");

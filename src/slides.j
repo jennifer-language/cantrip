@@ -35,6 +35,9 @@ export def const KBD_OPEN as string init "<kbd>";
 /** Closing tag of a key cap. */
 export def const KBD_CLOSE as string init "</kbd>";
 
+/** The byte-order mark some editors write at the start of a UTF-8 file. */
+export def const BOM as string init "\uFEFF";
+
 /** The page-break comment the PDF renderer understands. */
 export def const PAGE_BREAK as string init "<!-- pagebreak -->";
 
@@ -544,12 +547,17 @@ export func heading(body as string) {
  * Front matter is read from the top of the source; the body below it is cut
  * into slides on separator lines, and each slide's speaker notes and title
  * are lifted out. A deck with no `title` in its front matter borrows the
- * first slide's heading.
+ * first slide's heading. A leading byte-order mark is dropped first, since
+ * left in place it would hide the front-matter fence on line 1.
  * @param source {string} the whole Markdown source
  * @return {Deck} the parsed deck, possibly with no slides
  */
 export func parse(source as string) {
-    def split as Split init frontMatter($source);
+    def text as string init $source;
+    if (strings.startsWith($text, BOM)) {
+        $text = strings.substring($text, 1, len($text));
+    }
+    def split as Split init frontMatter($text);
     def deck as Deck init Deck{
         title: metaOr($split.meta, "title", ""),
         author: metaOr($split.meta, "author", ""),
