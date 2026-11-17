@@ -72,6 +72,9 @@ swallow the deck.
 | `keywords` | the PDF keywords and the HTML `keywords` meta tag | none |
 | `transition` | which [slide transition](themes.md#transitions) the HTML uses | `fade` |
 | `lang` | the HTML `lang` attribute | `en` |
+| `notes` | whether the HTML's speaker-notes panel is `open` or `closed` when the page opens | `closed` |
+| `slide` | the slide the HTML opens on, from 1 | `1` |
+| `overview` | whether the HTML opens in the slide overview, `open` or `closed` | `closed` |
 
 Values may be quoted or bare: `title: "A Deck"` and `title: A Deck` agree. A
 value keeps its internal colons, so `ratio: 16:9` reads correctly. Keys are
@@ -83,6 +86,31 @@ some other tool without upsetting this one.
 
 `--theme`, `--ratio`, and `--transition` on the command line override the file. The file
 overrides the built-in default.
+
+### How the slideshow opens
+
+`notes`, `slide` and `overview` set the state the HTML opens in. Three
+sources set them, and a later one wins:
+
+1. the front matter: `notes: open`, `slide: 3`, `overview: open`;
+2. the command line: `--notes-panel open|closed`, `--start-slide N`,
+   `--overview open|closed` on `build` or `html`;
+3. the page's URL when it is viewed: `?notes=1` or `?notes=0`,
+   `?overview=1` or `?overview=0`, and the slide fragment `#3`.
+
+Values are checked strictly where the author sets them: anything but `open` or
+`closed`, a slide number that is not a whole number from 1, or a slide past the
+end of the deck fails the build (a bad flag value is exit code `2`, a bad
+front-matter value `1`). `notes: open` in a page built with `--no-notes` fails
+too, with "notes: open needs the notes". In the URL, which is the viewer's
+input, an unknown value is ignored and the built-in start applies.
+
+The notes panel takes the bottom 30% of the window; while it is open, the
+slide is scaled into the space above it, so the panel never covers it. On a
+window narrower than 800 pixels or lower than 560 (a phone), there is no room
+for both, so the page starts with the notes closed even when the deck says
+`open`; <kbd>s</kbd> opens them, and `?notes=1` in the URL opens them at
+start anyway. <kbd>s</kbd> toggles the panel in every case.
 
 ## Speaker notes live in a comment
 
@@ -187,17 +215,22 @@ valid relative to wherever you serve or open the HTML from. Only a relative
 path or an `http`, `https`, or `mailto` URL is kept; any other scheme
 (`javascript:`, `data:`, ...) becomes `#`, for images and links alike.
 
-In the **PDF** the picture has to be read off disk, and `cantrip` looks for it
-twice: as written, then relative to the directory the deck came from. So
-`![x](img/a.png)` works from any working directory. A picture it cannot find,
-and any `http://`, `https://`, `data:` or `//` URL, falls back to the image's
-alt text in square brackets - a missing picture should not cost you the deck.
-`--verbose` names each one it skipped.
+In the **PDF** the picture has to be read off disk, and `cantrip` resolves its
+path against the directory the deck came from (the first file's, for a deck of
+several files), never against the working directory. So `![x](img/a.png)`
+works from wherever you run `cantrip`.
 
-The PDF reads whatever path the deck names, an absolute path or one with
-`..` in it included, as long as the file is a PNG, JPEG, or GIF that you can
-read. So a deck from somebody else can pull any picture on your machine into
-the PDF it builds; read such a deck before you build and share its PDF.
+A picture is read only from the deck's directory or below it. An absolute
+path, a path whose `..` steps lead out of the directory, and a symlink that
+points out of it are refused, and so is anything that is not a regular file.
+A deck from somebody else therefore cannot pull another file on your machine
+into the PDF it builds. Keep a deck's pictures beside it or in a folder under
+it.
+
+A refused picture, a picture it cannot find, and any `http://`, `https://`,
+`data:` or `//` URL fall back to the image's alt text in square brackets - a
+missing picture should not cost you the deck. `--verbose` names each one it
+skipped, and why.
 
 Only a paragraph that is a single image is drawn into the PDF. An image inline
 in a sentence, in a list item, in a quote, or in a table cell keeps the `[alt]`
@@ -218,6 +251,14 @@ Without `--raw-html` only the bare tag is recognised - one with attributes stays
 text - and inside a code span or a fenced block it stays as written, so you can
 still show it as code.
 
+## The slideshow's own names
+
+Every id and class the slideshow itself uses starts with `cantrip-`
+(`#cantrip-deck`, `.cantrip-slide`, `#cantrip-overview`, ...), and its
+stylesheet and script look for them only where they put them. An attribute
+list on a heading, `## Help {#help .slide}` or even `{#cantrip-help}`, styles
+that heading and nothing else; the overview, help, and notes keep working.
+
 ## Several files, one deck
 
 ```sh
@@ -228,6 +269,15 @@ The files are read in order and their slides concatenated, numbered straight
 through. The **first** file's front matter describes the deck; later files
 contribute only slides. Outputs are named after the first file unless `--out`
 says otherwise.
+
+## Size limits
+
+A deck file may be at most 2 MiB, and a deck at most 2,000 slides, counted
+across all its files. Either limit is checked before the slides are parsed, and
+a deck over one is refused with exit code `1` and a message naming the limit.
+A 2,000-slide deck is about 270 KB of Markdown, so neither limit is close to a
+real talk; they keep a runaway or hostile file from taking minutes and
+gigabytes to lay out.
 
 ## Page breaks
 

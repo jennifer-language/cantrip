@@ -53,9 +53,12 @@ heading at all, which is usually a separator in the wrong place.
 | `--bookmarks N` | PDF outline depth, 0 for none | `2` |
 | `-n`, `--notes` | put speaker notes **into** the PDF | off |
 | `--no-notes` | leave speaker notes **out of** the HTML | off |
+| `--notes-panel open\|closed` | HTML: the speaker-notes panel open or closed when the page opens | the deck's `notes:`, else `closed` |
+| `--start-slide N` | HTML: the slide the page opens on, from 1 | the deck's `slide:`, else `1` |
+| `--overview open\|closed` | HTML: open in the slide overview | the deck's `overview:`, else `closed` |
 | `--no-numbers` | omit slide numbers | off |
 | `--raw-html` | pass raw HTML through unescaped | off |
-| `-v`, `--verbose` | report byte counts and skipped images | off |
+| `-v`, `--verbose` | report byte counts, and each image skipped and why | off |
 
 `--flag=value` and `--flag value` both work, short flags bundle (`-nv`), and
 `--` ends the options.
@@ -72,6 +75,12 @@ your own copy.
 cantrip html talk.md --no-notes -o public/talk.html   # for the attendees
 cantrip pdf  talk.md --notes    -o talk-presenter.pdf # for you
 ```
+
+`--notes-panel` is a third, separate thing: whether the HTML's notes panel is
+open when the page loads (`--notes` already means "notes in the PDF"). It needs
+the notes in the page, so `--no-notes --notes-panel open` is refused with exit
+code `1` rather than producing a page whose panel cannot open. See
+[How the slideshow opens](format.md#how-the-slideshow-opens).
 
 ### What `--out` means
 
@@ -103,14 +112,17 @@ An output is never written over one of the input files: `-o talk.md` on
 | Code | Means |
 | ---- | ----- |
 | `0` | it worked |
-| `1` | it was asked correctly but could not be done - a missing file, an unknown theme, a deck with no slides, an output that would overwrite an input |
-| `2` | it was asked incorrectly - no arguments, an unknown verb or flag, a verb with no input file |
+| `1` | it was asked correctly but could not be done - a missing file, an unknown theme, a deck with no slides, a deck over a [size limit](format.md#size-limits) (2 MiB a file, 2,000 slides), an output that would overwrite an input |
+| `2` | it was asked incorrectly - no arguments, an unknown verb or flag, a malformed flag value such as `--bookmarks x`, `--notes-panel maybe` or `--start-slide 0`, a verb with no input file |
 
 The split matters in a shell script: a `2` is a bug in your command line, a `1`
 is a problem with the deck or its surroundings. `--help` and `--version` exit
 `0`. Errors, warnings, and the usage text printed for a misuse go to stderr;
 stdout carries only what you asked for - the `wrote ...` lines, `info`,
-`themes`, `--help`, and `--version`.
+`themes`, `--help`, and `--version`. Text taken from the deck, such as the
+titles `info` lists, the image paths `--verbose` names, or a theme name in an
+error, is printed with its control characters escaped (`\x1B`), so a deck
+cannot send escape sequences to your terminal.
 
 ```sh
 cantrip build talk.md || echo "deck did not build" >&2
@@ -133,7 +145,10 @@ Open the file. No server is needed, and nothing is fetched.
 | <kbd>Esc</kbd> | close an overlay |
 
 The current slide is in the URL fragment (`talk.html#4`), so a reload keeps your
-place and you can link to a slide. The slide scales to the window, so the deck
+place and you can link to a slide. `?notes=1` / `?notes=0` and `?overview=1` /
+`?overview=0` in the URL open or close the notes panel and the overview when
+the page loads (`talk.html?notes=0#4`), whatever the deck was built with. While
+the notes panel is open, the slide is scaled into the space above it. The slide scales to the window, so the deck
 looks the same on a laptop and a projector.
 
 ### Printing from the browser
