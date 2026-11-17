@@ -217,11 +217,11 @@ func testCssCarriesHeadingAndRadius() {
 func testOverlaysSetTheirOwnTextColour() {
     for (def name in ["plain", "sepia", "carbon-dark"]) {
         def out as string init css(theme($name), stage("16:9"));
-        def at as int init strings.indexOf($out, '#help kbd {');
+        def at as int init strings.indexOf($out, 'body > #cantrip-help kbd {');
         testing.assertTrue($at >= 0);
         def rule as string init strings.substring($out, $at, strings.indexOf($out, '}', $at));
         testing.assertContains($rule, "color: #e6e8ee;");
-        testing.assertContains($out, '#notes code, #notes kbd {');
+        testing.assertContains($out, 'body > #cantrip-notes code, body > #cantrip-notes kbd {');
     }
 }
 
@@ -229,10 +229,12 @@ func testOverlaysSetTheirOwnTextColour() {
 func testCssCoversTransitions() {
     def out as string init css(theme("plain"), stage("16:9"));
     for (def name in ["fade", "slide", "zoom"]) {
-        testing.assertContains($out, "#deck[data-transition=\"" + $name + "\"]");
+        testing.assertContains($out, "body > #cantrip-deck[data-transition=\"" + $name + "\"]");
     }
     testing.assertContains($out, "@media (prefers-reduced-motion: reduce)");
-    testing.assertContains($out, "#deck.ready:not([data-transition=\"none\"]) .slide");
+    testing.assertContains(
+        $out,
+        "body > #cantrip-deck.cantrip-ready:not([data-transition=\"none\"]) > .cantrip-slide");
 }
 
 /** A dark theme's background is darker than its text, and the reverse. */
@@ -396,19 +398,49 @@ func testCssCentresTheStage() {
     testing.assertFalse(strings.contains($out, "place-items: center;\n    overflow: hidden;"));
 }
 
+/**
+ * Every rule for a part of the slideshow names it by its prefixed id or class
+ * and anchors it at a child of `body` or at a slide, so a heading carrying
+ * `{#help .slide}` or `{#cantrip-help}` from the deck matches none of them.
+ */
+func testCssSelectorsAreScoped() {
+    def out as string init css(theme("plain"), stage("16:9"));
+    for (def line in strings.split($out, "\n")) {
+        def bare as string init strings.trim($line);
+        if (strings.contains($bare, "#cantrip-") or strings.contains($bare, ".cantrip-")) {
+            testing.assertTrue(
+                strings.startsWith($bare, "body > #cantrip-") or
+                    strings.startsWith($bare, ".cantrip-slide > "));
+        }
+    }
+    def unprefixed as list of string init [
+        "#deck",
+        "#help",
+        "#notes",
+        "#overview",
+        "#progress",
+        ".slide",
+        ".thumb"
+    ];
+    for (def bareName in $unprefixed) {
+        testing.assertFalse(strings.contains($out, $bareName));
+    }
+}
+
 /** The stylesheet styles the structure the HTML renderer emits. */
 func testCssCoversTheMarkup() {
     def out as string init css(theme("plain"), stage("16:9"));
     def selectors as list of string init [
-        ".slide",
-        ".slide.current",
-        "#deck",
-        "#progress",
-        "#notes",
-        "#help",
-        "#overview",
-        ".slide-number",
-        ".slide-footer",
+        'body > #cantrip-deck > .cantrip-slide {',
+        "body > #cantrip-deck > .cantrip-slide.cantrip-current",
+        'body > #cantrip-deck {',
+        'body > #cantrip-progress {',
+        'body > #cantrip-notes {',
+        'body > #cantrip-help {',
+        'body > #cantrip-overview {',
+        'body > #cantrip-overview > .cantrip-thumb {',
+        '.cantrip-slide > div.cantrip-slide-number {',
+        '.cantrip-slide > div.cantrip-slide-footer {',
         ".admonition",
         "li.task-list-item",
         "@media print",

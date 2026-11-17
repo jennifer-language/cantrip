@@ -136,12 +136,12 @@ func testSection() {
     def opts as Options init defaults();
     $opts.footer = "Foot & Co";
     def got as string init section($slide, 2, $opts);
-    testing.assertContains($got, "<section class=\"slide\" id=\"slide-1\"");
+    testing.assertContains($got, "<section class=\"cantrip-slide\" id=\"cantrip-slide-1\"");
     testing.assertContains($got, "data-n=\"1\"");
     testing.assertContains($got, "aria-label=\"One &amp; Only\"");
-    testing.assertContains($got, "<div class=\"slide-number\">1 / 2</div>");
+    testing.assertContains($got, "<div class=\"cantrip-slide-number\">1 / 2</div>");
     testing.assertContains($got, "Foot &amp; Co");
-    testing.assertContains($got, "slide-notes");
+    testing.assertContains($got, "cantrip-slide-notes");
     testing.assertContains($got, "</section>");
 }
 
@@ -152,15 +152,15 @@ func testSectionWithoutFurniture() {
     $opts.numbers = false;
     $opts.notes = false;
     def got as string init section($slide, 2, $opts);
-    testing.assertFalse(strings.contains($got, "slide-number"));
-    testing.assertFalse(strings.contains($got, "slide-notes"));
-    testing.assertFalse(strings.contains($got, "slide-footer"));
+    testing.assertFalse(strings.contains($got, "cantrip-slide-number"));
+    testing.assertFalse(strings.contains($got, "cantrip-slide-notes"));
+    testing.assertFalse(strings.contains($got, "cantrip-slide-footer"));
 }
 
 /** A slide with no notes carries no notes element even when notes are on. */
 func testSectionNoNotes() {
     def slide as slides.Slide init fixture().slides[1];
-    testing.assertFalse(strings.contains(section($slide, 2, defaults()), "slide-notes"));
+    testing.assertFalse(strings.contains(section($slide, 2, defaults()), "cantrip-slide-notes"));
 }
 
 /** A slide's label is its heading, else its number. */
@@ -173,7 +173,7 @@ func testLabel() {
 /** The overview holds one jump target per slide. */
 func testOverview() {
     def got as string init overview(fixture());
-    testing.assertContains($got, "id=\"overview\"");
+    testing.assertContains($got, "id=\"cantrip-overview\"");
     testing.assertContains($got, "hidden");
     testing.assertContains($got, "data-go=\"1\"");
     testing.assertContains($got, "data-go=\"2\"");
@@ -183,7 +183,7 @@ func testOverview() {
 /** An empty deck still produces a well-formed, empty overview. */
 func testOverviewEmpty() {
     def got as string init overview(slides.parse(""));
-    testing.assertContains($got, "id=\"overview\"");
+    testing.assertContains($got, "id=\"cantrip-overview\"");
     testing.assertFalse(strings.contains($got, "data-go="));
 }
 
@@ -238,7 +238,7 @@ func testColorScheme() {
 func testHelpPanel() {
     def got as string init helpPanel();
     def js as string init script();
-    testing.assertContains($got, "id=\"help\"");
+    testing.assertContains($got, "id=\"cantrip-help\"");
     testing.assertContains($got, "hidden");
     for (def key in ["o", "s", "f", "?"]) {
         testing.assertContains($got, "<kbd>" + $key + "</kbd>");
@@ -258,13 +258,13 @@ func testRender() {
     testing.assertTrue(strings.startsWith($got, "<!doctype html>"));
     testing.assertTrue(strings.endsWith($got, "</html>\n"));
     testing.assertContains($got, "<html lang=\"en\">");
-    testing.assertEqual(len(strings.split($got, "<section class=\"slide\"")), 3);
+    testing.assertEqual(len(strings.split($got, "<section class=\"cantrip-slide\"")), 3);
     testing.assertEqual(len(strings.split($got, "</section>")), 3);
-    testing.assertContains($got, "id=\"progress\"");
-    testing.assertContains($got, "id=\"deck\"");
-    testing.assertContains($got, "id=\"notes\"");
-    testing.assertContains($got, "id=\"overview\"");
-    testing.assertContains($got, "id=\"help\"");
+    testing.assertContains($got, "id=\"cantrip-progress\"");
+    testing.assertContains($got, "id=\"cantrip-deck\"");
+    testing.assertContains($got, "id=\"cantrip-notes\"");
+    testing.assertContains($got, "id=\"cantrip-overview\"");
+    testing.assertContains($got, "id=\"cantrip-help\"");
     testing.assertContains($got, "<script>");
 }
 
@@ -280,15 +280,51 @@ func testRenderWithoutNotes() {
     def opts as Options init defaults();
     $opts.notes = false;
     def got as string init render(fixture(), $opts);
-    testing.assertFalse(strings.contains($got, "id=\"notes\""));
+    testing.assertFalse(strings.contains($got, "id=\"cantrip-notes\""));
     testing.assertContains($got, "notes && !notes.hidden");
+}
+
+/**
+ * Ids and classes a deck gives its headings cannot stand in for the
+ * slideshow's own parts: the parts are prefixed, the script finds each one as
+ * a child of `body` (a heading never is), and the slides as children of the
+ * deck element, so the heading keeps its attributes and the slide count holds.
+ */
+func testHeadingAttributesCannotCollide() {
+    # Raw strings: a brace in a cooked string opens an interpolation slot.
+    def src as string init strings.join(
+        [
+            '## A {#cantrip-help .cantrip-slide}',
+            "",
+            "---",
+            "",
+            '## B {#help .slide}',
+            "",
+            '## C {#cantrip-deck .cantrip-slide-notes}',
+            "",
+            '## D {#overview}',
+            "",
+            "<!-- notes: n -->"
+        ],
+        "\n");
+    def got as string init render(slides.parse($src), defaults());
+    testing.assertEqual(len(strings.split($got, "<section class=\"cantrip-slide\"")), 3);
+    testing.assertContains($got, "<h2 id=\"cantrip-help\" class=\"cantrip-slide\">A</h2>");
+    testing.assertContains($got, "<h2 id=\"help\" class=\"slide\">B</h2>");
+    def js as string init script();
+    testing.assertFalse(strings.contains($js, "getElementById"));
+    testing.assertFalse(strings.contains($js, "document.querySelectorAll"));
+    testing.assertContains($js, "document.querySelector(\"body > #cantrip-\" + id)");
+    testing.assertContains($js, "deck.querySelectorAll(\":scope > .cantrip-slide\")");
+    testing.assertContains($js, "querySelector(\":scope > div.cantrip-slide-notes:last-child\")");
+    testing.assertContains($js, "notes.querySelector(\":scope > #cantrip-notes-body\")");
 }
 
 /** An empty deck renders a valid document with no slides. */
 func testRenderEmpty() {
     def got as string init render(slides.parse(""), defaults());
     testing.assertTrue(strings.startsWith($got, "<!doctype html>"));
-    testing.assertFalse(strings.contains($got, "<section class=\"slide\""));
+    testing.assertFalse(strings.contains($got, "<section class=\"cantrip-slide\""));
 }
 
 /** Every theme and ratio renders without leaving a placeholder behind. */
@@ -312,7 +348,7 @@ func testScript() {
     testing.assertContains($got, "keydown");
     testing.assertContains($got, "hashchange");
     testing.assertContains($got, "resize");
-    testing.assertContains($got, "querySelectorAll(\".slide\")");
+    testing.assertContains($got, "querySelectorAll(\":scope > .cantrip-slide\")");
 }
 
 /** A key cap in prose renders as a real `<kbd>` element. */
@@ -353,10 +389,10 @@ func testScriptMarksSlidesForTransitions() {
     def got as string init script();
     testing.assertContains($got, "s.style.transform = \"scale(\" + k + \")\"");
     testing.assertFalse(strings.contains($got, "translate(-50%"));
-    testing.assertContains($got, "toggle(\"past\", i < at)");
-    testing.assertContains($got, "toggle(\"current\", i === at)");
-    testing.assertContains($got, "toggle(\"future\", i > at)");
-    testing.assertContains($got, "deck.classList.add(\"ready\")");
+    testing.assertContains($got, "toggle(\"cantrip-past\", i < at)");
+    testing.assertContains($got, "toggle(\"cantrip-current\", i === at)");
+    testing.assertContains($got, "toggle(\"cantrip-future\", i > at)");
+    testing.assertContains($got, "deck.classList.add(\"cantrip-ready\")");
 }
 
 /** Every transition is known, and the default is one of them. */
@@ -412,4 +448,120 @@ func testScriptStopsThumbnailKeys() {
 func testScriptHasNoTemplatePlaceholders() {
     testing.assertFalse(strings.contains(script(), "%w%"));
     testing.assertFalse(strings.contains(script(), "%h%"));
+}
+
+/**
+ * A two-slide deck whose front matter sets the start options.
+ * @param lines {string} front-matter lines, each ending in a newline
+ * @return {slides.Deck} the deck
+ */
+func startDeck(lines as string) {
+    return slides.parse("---\n" + $lines + "---\n# One\n\n<!-- notes: n -->\n\n---\n\n## Two\n");
+}
+
+/**
+ * Resolve the start options and report how they failed.
+ * @param deck {slides.Deck} the deck
+ * @param opts {Options} the options
+ * @return {string} "kind: message", "" when it did not throw
+ */
+func startFailure(deck as slides.Deck, opts as Options) {
+    try {
+        pickStart($deck, $opts);
+    } catch (e) {
+        return $e.kind + ": " + $e.message;
+    }
+    return "";
+}
+
+/** With nothing set, the slideshow opens closed on slide 1, as before. */
+func testPickStartDefaults() {
+    testing.assertEqual(
+        pickStart(fixture(), defaults()),
+        Start{notes: false, slide: 1, overview: false});
+    def got as string init render(fixture(), defaults());
+    testing.assertContains(
+        $got,
+        " data-notes=\"closed\" data-slide=\"1\" data-overview=\"closed\">");
+}
+
+/** The front matter sets the start; values are case-insensitive. */
+func testPickStartFromFrontMatter() {
+    def deck as slides.Deck init startDeck("notes: Open\nslide: 2\noverview: open\n");
+    testing.assertEqual(pickStart($deck, defaults()), Start{notes: true, slide: 2, overview: true});
+    testing.assertContains(
+        render($deck, defaults()),
+        " data-notes=\"open\" data-slide=\"2\" data-overview=\"open\">");
+}
+
+/** An option (the command line) wins over the front matter. */
+func testPickStartOptionsWin() {
+    def deck as slides.Deck init startDeck("notes: open\nslide: 2\noverview: open\n");
+    def opts as Options init defaults();
+    $opts.startNotes = "closed";
+    $opts.startSlide = "1";
+    $opts.startOverview = "closed";
+    testing.assertEqual(pickStart($deck, $opts), Start{notes: false, slide: 1, overview: false});
+    def only as Options init defaults();
+    $only.startNotes = "open";
+    testing.assertEqual(
+        pickStart(startDeck("slide: 2\n"), $only),
+        Start{notes: true, slide: 2, overview: false});
+}
+
+/** A bad value in the front matter is refused at build time. */
+func testPickStartRejectsBadValues() {
+    testing.assertEqual(
+        startFailure(startDeck("notes: yes\n"), defaults()),
+        "start: notes wants open or closed, got \"yes\"");
+    testing.assertContains(
+        startFailure(startDeck("overview: 1\n"), defaults()),
+        "overview wants open or closed");
+    testing.assertContains(
+        startFailure(startDeck("slide: 0\n"), defaults()),
+        "slide wants a slide number from 1");
+    testing.assertContains(
+        startFailure(startDeck("slide: two\n"), defaults()),
+        "slide wants a slide number");
+    testing.assertEqual(
+        startFailure(startDeck("slide: 3\n"), defaults()),
+        "start: slide 3 is past the end; the deck has 2 slide(s)");
+}
+
+/** Open notes in a page built without them are an error, not ignored. */
+func testPickStartOpenNotesNeedNotes() {
+    def opts as Options init defaults();
+    $opts.notes = false;
+    testing.assertContains(
+        startFailure(startDeck("notes: open\n"), $opts),
+        "notes: open needs the notes");
+    testing.assertEqual(startFailure(startDeck("notes: closed\n"), $opts), "");
+    $opts.startNotes = "open";
+    testing.assertContains(startFailure(fixture(), $opts), "notes: open needs the notes");
+}
+
+/** The script reads the start from the deck, lets the URL override it, and keeps s. */
+func testScriptStart() {
+    def js as string init script();
+    testing.assertContains($js, 'var query = new URLSearchParams(location.search);');
+    testing.assertContains($js, 'if (v === "1") { return true; }');
+    testing.assertContains($js, 'if (v === "0") { return false; }');
+    testing.assertContains(
+        $js,
+        'var startNotes = asked("notes", deck.dataset.notes === "open" && roomy);');
+    testing.assertContains(
+        $js,
+        'var startOverview = asked("overview", deck.dataset.overview === "open");');
+    testing.assertContains($js, 'return isNaN(n) ? startSlide : n - 1;');
+    testing.assertContains($js, 'else if (k === "s" && notes) { setNotes(notes.hidden); }');
+    testing.assertContains($js, '(min-width: 800px) and (min-height: 560px)');
+}
+
+/** open / closed is case-insensitive; "" is closed; anything else is refused. */
+func testOpenClosed() {
+    testing.assertTrue(openClosed("notes", "open"));
+    testing.assertTrue(openClosed("notes", "OPEN"));
+    testing.assertFalse(openClosed("notes", "closed"));
+    testing.assertFalse(openClosed("notes", ""));
+    testing.assertThrowsWith("openClosed", ["notes", "1"], "start");
 }

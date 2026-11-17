@@ -804,7 +804,7 @@ html, body {
     -webkit-font-smoothing: antialiased;
 }
 
-#deck {
+body > #cantrip-deck {
     position: fixed;
     inset: 0;
     overflow: hidden;
@@ -819,7 +819,7 @@ html, body {
  * all work about that centre; a translate(-50%) inside the transform would
  * drift as it scaled.
  */
-.slide {
+body > #cantrip-deck > .cantrip-slide {
     visibility: hidden;
     position: absolute;
     left: 50%;
@@ -834,61 +834,73 @@ html, body {
     overflow: hidden;
 }
 
-.slide.current { visibility: visible; z-index: 1; }
+body > #cantrip-deck > .cantrip-slide.cantrip-current { visibility: visible; z-index: 1; }
 
 /*
  * Transitions, chosen by `data-transition` on the deck. Every slide is laid
  * out and only the current one is visible; the script marks the others
- * `past` or `future`, and a transition animates the individual opacity,
- * translate, and scale properties, which compose with the fitting transform
- * instead of replacing it. A slide being left stays visible for the length of
- * one transition, so it can animate out. `ready` arrives just after the first
- * slide is shown, so a deck opens on its slide rather than animating to it.
+ * `cantrip-past` or `cantrip-future`, and a transition animates the individual
+ * opacity, translate, and scale properties, which compose with the fitting
+ * transform instead of replacing it. A slide being left stays visible for the
+ * length of one transition, so it can animate out. `cantrip-ready` arrives just
+ * after the first slide is shown, so a deck opens on its slide rather than
+ * animating to it.
+ *
+ * Every id and class the slideshow owns is prefixed `cantrip-`, and every rule
+ * is anchored at a child of `body`, so an `{#id .class}` list on a heading in
+ * the deck cannot take on the styling of the parts of the slideshow.
  */
-#deck.ready:not([data-transition="none"]) .slide {
+body > #cantrip-deck.cantrip-ready:not([data-transition="none"]) > .cantrip-slide {
     transition: visibility 0s linear var(--speed);
 }
-#deck.ready:not([data-transition="none"]) .slide.current { transition: visibility 0s; }
+body > #cantrip-deck.cantrip-ready:not([data-transition="none"]) > .cantrip-slide.cantrip-current {
+    transition: visibility 0s;
+}
 
-#deck[data-transition="fade"] .slide { opacity: 0; }
-#deck[data-transition="fade"] .slide.current { opacity: 1; }
-#deck.ready[data-transition="fade"] .slide {
+body > #cantrip-deck[data-transition="fade"] > .cantrip-slide { opacity: 0; }
+body > #cantrip-deck[data-transition="fade"] > .cantrip-slide.cantrip-current { opacity: 1; }
+body > #cantrip-deck.cantrip-ready[data-transition="fade"] > .cantrip-slide {
     transition: opacity var(--speed) ease, visibility 0s linear var(--speed);
 }
-#deck.ready[data-transition="fade"] .slide.current {
+body > #cantrip-deck.cantrip-ready[data-transition="fade"] > .cantrip-slide.cantrip-current {
     transition: opacity var(--speed) ease, visibility 0s;
 }
 
-#deck[data-transition="slide"] .slide.past { translate: -100vw 0; }
-#deck[data-transition="slide"] .slide.future { translate: 100vw 0; }
-#deck.ready[data-transition="slide"] .slide {
+body > #cantrip-deck[data-transition="slide"] > .cantrip-slide.cantrip-past { translate: -100vw 0; }
+body > #cantrip-deck[data-transition="slide"] > .cantrip-slide.cantrip-future {
+    translate: 100vw 0;
+}
+body > #cantrip-deck.cantrip-ready[data-transition="slide"] > .cantrip-slide {
     transition: translate var(--speed) ease-in-out, visibility 0s linear var(--speed);
 }
-#deck.ready[data-transition="slide"] .slide.current {
+body > #cantrip-deck.cantrip-ready[data-transition="slide"] > .cantrip-slide.cantrip-current {
     transition: translate var(--speed) ease-in-out, visibility 0s;
 }
 
-#deck[data-transition="zoom"] .slide { opacity: 0; }
-#deck[data-transition="zoom"] .slide.past { scale: 1.12; }
-#deck[data-transition="zoom"] .slide.future { scale: 0.88; }
-#deck[data-transition="zoom"] .slide.current { opacity: 1; scale: 1; }
-#deck.ready[data-transition="zoom"] .slide {
+body > #cantrip-deck[data-transition="zoom"] > .cantrip-slide { opacity: 0; }
+body > #cantrip-deck[data-transition="zoom"] > .cantrip-slide.cantrip-past { scale: 1.12; }
+body > #cantrip-deck[data-transition="zoom"] > .cantrip-slide.cantrip-future { scale: 0.88; }
+body > #cantrip-deck[data-transition="zoom"] > .cantrip-slide.cantrip-current {
+    opacity: 1;
+    scale: 1;
+}
+body > #cantrip-deck.cantrip-ready[data-transition="zoom"] > .cantrip-slide {
     transition: opacity var(--speed) ease, scale var(--speed) ease,
         visibility 0s linear var(--speed);
 }
-#deck.ready[data-transition="zoom"] .slide.current {
+body > #cantrip-deck.cantrip-ready[data-transition="zoom"] > .cantrip-slide.cantrip-current {
     transition: opacity var(--speed) ease, scale var(--speed) ease, visibility 0s;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    #deck .slide {
+    body > #cantrip-deck > .cantrip-slide {
         transition: none !important;
         translate: none !important;
         scale: none !important;
     }
 }
 
-.slide > :first-child { margin-top: 0; }
+.cantrip-slide > :first-child { margin-top: 0; }
 
 h1, h2, h3, h4, h5, h6 {
     font-family: %headingfont%;
@@ -989,7 +1001,7 @@ dd { margin: 0 0 0.5em 1.4em; }
 .admonition > :last-child { margin-bottom: 0; }
 .admonition-title { font-weight: 700; color: var(--accent); }
 
-.slide-number {
+.cantrip-slide > div.cantrip-slide-number {
     position: absolute;
     right: 80px;
     bottom: 44px;
@@ -998,7 +1010,7 @@ dd { margin: 0 0 0.5em 1.4em; }
     font-variant-numeric: tabular-nums;
 }
 
-.slide-footer {
+.cantrip-slide > div.cantrip-slide-footer {
     position: absolute;
     left: 80px;
     bottom: 44px;
@@ -1010,7 +1022,7 @@ dd { margin: 0 0 0.5em 1.4em; }
     text-overflow: ellipsis;
 }
 
-#progress {
+body > #cantrip-progress {
     position: fixed;
     left: 0;
     top: 0;
@@ -1021,10 +1033,15 @@ dd { margin: 0 0 0.5em 1.4em; }
     z-index: 10;
 }
 
-#notes {
+/*
+ * The notes panel takes the bottom 30% of the window, and while it is open the
+ * deck ends above it (the script marks the deck cantrip-notes-open and fits the
+ * slide into what is left), so the panel never covers the slide.
+ */
+body > #cantrip-notes {
     position: fixed;
     inset: auto 0 0 0;
-    max-height: 38%;
+    height: 30vh;
     overflow: auto;
     padding: 18px 24px;
     background: #14161c;
@@ -1035,23 +1052,24 @@ dd { margin: 0 0 0.5em 1.4em; }
     z-index: 11;
 }
 
-#notes[hidden] { display: none; }
-#notes h2 {
+body > #cantrip-notes[hidden] { display: none; }
+body > #cantrip-deck.cantrip-notes-open { bottom: 30vh; }
+body > #cantrip-notes > h2 {
     font-size: 15px;
     margin: 0 0 8px;
     color: var(--accent);
     text-transform: uppercase;
     letter-spacing: 0.08em;
 }
-#notes p { font-size: 16px; }
-#notes code, #notes kbd {
+body > #cantrip-notes p { font-size: 16px; }
+body > #cantrip-notes code, body > #cantrip-notes kbd {
     background: #23262f;
     color: #e6e8ee;
     border-color: #3a3f4b;
 }
-#notes a { color: #8ab4ff; }
+body > #cantrip-notes a { color: #8ab4ff; }
 
-#help {
+body > #cantrip-help {
     position: fixed;
     inset: 0;
     display: grid;
@@ -1062,13 +1080,13 @@ dd { margin: 0 0 0.5em 1.4em; }
     font-size: 17px;
 }
 
-#help[hidden] { display: none; }
-#help table { border-collapse: collapse; }
-#help td { border: 0; padding: 6px 18px 6px 0; font-size: 17px; }
+body > #cantrip-help[hidden] { display: none; }
+body > #cantrip-help table { border-collapse: collapse; }
+body > #cantrip-help td { border: 0; padding: 6px 18px 6px 0; font-size: 17px; }
 /* The help overlay and the notes panel are always dark, whatever the theme,
    so everything inside them sets its own colours: a key cap or code span that
    inherited the code colours of the theme would be dark on dark in a light theme. */
-#help kbd {
+body > #cantrip-help kbd {
     font-family: %monofont%;
     background: #23262f;
     color: #e6e8ee;
@@ -1078,7 +1096,7 @@ dd { margin: 0 0 0.5em 1.4em; }
     font-size: 15px;
 }
 
-#overview {
+body > #cantrip-overview {
     position: fixed;
     inset: 0;
     overflow: auto;
@@ -1091,9 +1109,9 @@ dd { margin: 0 0 0.5em 1.4em; }
     align-content: start;
 }
 
-#overview[hidden] { display: none; }
+body > #cantrip-overview[hidden] { display: none; }
 
-#overview .thumb {
+body > #cantrip-overview > .cantrip-thumb {
     cursor: pointer;
     border: 2px solid transparent;
     border-radius: var(--radius);
@@ -1104,16 +1122,33 @@ dd { margin: 0 0 0.5em 1.4em; }
     overflow: hidden;
 }
 
-#overview .thumb:hover,
-#overview .thumb:focus-visible { border-color: var(--accent); outline: none; }
-#overview .thumb .n { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-#overview .thumb .t { font-size: 19px; font-weight: 600; color: var(--accent); margin-top: 6px; }
+body > #cantrip-overview > .cantrip-thumb:hover,
+body > #cantrip-overview > .cantrip-thumb:focus-visible {
+    border-color: var(--accent);
+    outline: none;
+}
+body > #cantrip-overview > .cantrip-thumb > .cantrip-thumb-n {
+    font-size: 13px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+body > #cantrip-overview > .cantrip-thumb > .cantrip-thumb-t {
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-top: 6px;
+}
 
 @media print {
     html, body { background: #fff; height: auto; }
-    #progress, #notes, #help, #overview { display: none !important; }
-    #deck { position: static; display: block; overflow: visible; }
-    .slide {
+    body > #cantrip-progress,
+    body > #cantrip-notes,
+    body > #cantrip-help,
+    body > #cantrip-overview {
+        display: none !important;
+    }
+    body > #cantrip-deck { position: static; display: block; overflow: visible; }
+    body > #cantrip-deck > .cantrip-slide {
         visibility: visible !important;
         opacity: 1 !important;
         translate: none !important;
@@ -1129,7 +1164,7 @@ dd { margin: 0 0 0.5em 1.4em; }
         width: 100%;
         height: 100vh;
     }
-    .slide:last-child { page-break-after: auto; break-after: auto; }
+    body > #cantrip-deck > .cantrip-slide:last-child { page-break-after: auto; break-after: auto; }
 }
 
 @page { size: %w%px %h%px; margin: 0; }

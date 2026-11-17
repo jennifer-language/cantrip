@@ -16,6 +16,7 @@
 use strings;
 use lists;
 use convert;
+use regex;
 
 import "html.j" as html;
 import "markdown.j" as markdown;
@@ -37,6 +38,9 @@ export def const DEFAULT_TRANSITION as string init "fade";
  * @field numbers {bool} show the slide counter bottom-right
  * @field rawHtml {bool} pass raw HTML in the Markdown through unescaped
  * @field transition {string} transition name, "" for the deck's own or the default
+ * @field startNotes {string} notes panel at start, "open" or "closed"; "" for the deck's own
+ * @field startSlide {string} the slide to open on, 1-based; "" for the deck's own
+ * @field startOverview {string} overview at start, "open" or "closed"; "" for the deck's own
  */
 export def struct Options {
     theme as string,
@@ -45,7 +49,24 @@ export def struct Options {
     notes as bool,
     numbers as bool,
     rawHtml as bool,
-    transition as string
+    transition as string,
+    startNotes as string,
+    startSlide as string,
+    startOverview as string
+};
+
+/**
+ * How the slideshow opens: resolved from the options, the front matter and
+ * the defaults (closed, slide 1, closed). The page's URL can still override
+ * each when it is viewed.
+ * @field notes {bool} the speaker-notes panel starts open
+ * @field slide {int} the slide to open on, 1-based
+ * @field overview {bool} the overview starts open
+ */
+export def struct Start {
+    notes as bool,
+    slide as int,
+    overview as bool
 };
 
 /**
@@ -60,8 +81,103 @@ export func defaults() {
         notes: true,
         numbers: true,
         rawHtml: false,
-        transition: ""
+        transition: "",
+        startNotes: "",
+        startSlide: "",
+        startOverview: ""
     };
+}
+
+/**
+ * An option value when given, else the deck's front-matter value, else "".
+ * @param deck {slides.Deck} the deck being rendered
+ * @param given {string} the option's value, "" when not given
+ * @param key {string} the front-matter key
+ * @return {string} the trimmed value, or ""
+ */
+func startValue(deck as slides.Deck, given as string, key as string) {
+    def want as string init strings.trim($given);
+    if ($want != "") {
+        return $want;
+    }
+    return slides.metaOr($deck.meta, $key, "");
+}
+
+/**
+ * A start error: kind "start", naming the setting and the value it got.
+ * @param message {string} what is wrong
+ * @return {Error} the error to throw
+ */
+func startError(message as string) {
+    return Error{kind: "start", message: $message, file: "", line: 0, col: 0};
+}
+
+/**
+ * Read an `open` / `closed` value, case-insensitively.
+ * @param name {string} the setting, for the message
+ * @param value {string} the value, "" for the default
+ * @return {bool} true for open; false for closed or ""
+ * @throws {Error} kind "start" for any other value
+ */
+export func openClosed(name as string, value as string) {
+    def v as string init strings.lower($value);
+    if ($v == "" or $v == "closed") {
+        return false;
+    }
+    if ($v == "open") {
+        return true;
+    }
+    throw startError($name + " wants open or closed, got \"" + $value + "\"");
+}
+
+/**
+ * Resolve how the slideshow opens. An option (from the command line) wins
+ * over the deck's `notes:`, `slide:` and `overview:` front-matter keys, which
+ * win over the defaults.
+ * @param deck {slides.Deck} the deck being rendered
+ * @param opts {Options} the caller's options
+ * @return {Start} the start state written into the page
+ * @throws {Error} kind "start" on a bad value, a slide past the end, or open
+ *     notes in a page built without them
+ */
+export func pickStart(deck as slides.Deck, opts as Options) {
+    def out as Start init Start{notes: false, slide: 1, overview: false};
+    $out.notes = openClosed("notes", startValue($deck, $opts.startNotes, "notes"));
+    $out.overview = openClosed("overview", startValue($deck, $opts.startOverview, "overview"));
+    def slide as string init startValue($deck, $opts.startSlide, "slide");
+    if ($slide != "") {
+        if (not regex.matches('^[1-9][0-9]{0,5}$', $slide)) {
+            throw startError("slide wants a slide number from 1, got \"" + $slide + "\"");
+        }
+        $out.slide = convert.toInt($slide);
+        def total as int init len($deck.slides);
+        if ($out.slide > $total) {
+            throw startError("slide " + $slide + " is past the end; the deck has " +
+                convert.toString($total) + " slide(s)");
+        }
+    }
+    if ($out.notes and not $opts.notes) {
+        throw startError("notes: open needs the notes; drop --no-notes or set notes: closed");
+    }
+    return $out;
+}
+
+/**
+ * The start state as `data-` attributes on the deck element.
+ * @param start {Start} the resolved start
+ * @return {string} the attributes, each preceded by a space
+ */
+func startAttributes(start as Start) {
+    def notes as string init "closed";
+    if ($start.notes) {
+        $notes = "open";
+    }
+    def overview as string init "closed";
+    if ($start.overview) {
+        $overview = "open";
+    }
+    return " data-notes=\"" + $notes + "\" data-slide=\"" + convert.toString($start.slide) +
+        "\" data-overview=\"" + $overview + "\"";
 }
 
 /**
@@ -205,23 +321,23 @@ export func unescapeKbd(text as string) {
  * @param slide {slides.Slide} the slide to render
  * @param total {int} the deck's slide count, for the counter
  * @param opts {Options} the caller's options
- * @return {string} one `<section class="slide">` element
+ * @return {string} one `<section class="cantrip-slide">` element
  */
 export func section(slide as slides.Slide, total as int, opts as Options) {
-    def out as string init "<section class=\"slide\" id=\"slide-" +
+    def out as string init "<section class=\"cantrip-slide\" id=\"cantrip-slide-" +
         convert.toString($slide.number) + "\" data-n=\"" +
         convert.toString($slide.number) + "\" aria-label=\"" +
         attrValue(label($slide)) + "\">";
     $out = $out + body($slide, $opts);
     if (strings.trim($opts.footer) != "") {
-        $out = $out + "<div class=\"slide-footer\">" + html.escape($opts.footer) + "</div>";
+        $out = $out + "<div class=\"cantrip-slide-footer\">" + html.escape($opts.footer) + "</div>";
     }
     if ($opts.numbers) {
-        $out = $out + "<div class=\"slide-number\">" + convert.toString($slide.number) +
+        $out = $out + "<div class=\"cantrip-slide-number\">" + convert.toString($slide.number) +
             " / " + convert.toString($total) + "</div>";
     }
     if ($opts.notes and $slide.notes != "") {
-        $out = $out + "<div class=\"slide-notes\" hidden>" +
+        $out = $out + "<div class=\"cantrip-slide-notes\" hidden>" +
             keyCaps(markdown.toHtmlWith($slide.notes, markdown.HtmlOptions{allowRawHtml: false})) +
             "</div>";
     }
@@ -243,16 +359,18 @@ export func label(slide as slides.Slide) {
 /**
  * The overview grid: one clickable thumbnail per slide.
  * @param deck {slides.Deck} the deck to summarize
- * @return {string} the `<div id="overview">` element, hidden by default
+ * @return {string} the `<div id="cantrip-overview">` element, hidden by default
  */
 export func overview(deck as slides.Deck) {
     # Collected and joined once: growing one string per slide copied the
     # whole grid on every pass, quadratic in the slide count.
-    def parts as list of string init ["<div id=\"overview\" hidden aria-label=\"Slide overview\">"];
+    def parts as list of string init [
+        "<div id=\"cantrip-overview\" hidden aria-label=\"Slide overview\">"
+    ];
     for (def slide in $deck.slides) {
-        $parts[] = "<div class=\"thumb\" tabindex=\"0\" role=\"button\" data-go=\"" +
-            convert.toString($slide.number) + "\"><div class=\"n\">" +
-            convert.toString($slide.number) + "</div><div class=\"t\">" +
+        $parts[] = "<div class=\"cantrip-thumb\" tabindex=\"0\" role=\"button\" data-go=\"" +
+            convert.toString($slide.number) + "\"><div class=\"cantrip-thumb-n\">" +
+            convert.toString($slide.number) + "</div><div class=\"cantrip-thumb-t\">" +
             html.escape(label($slide)) + "</div></div>";
     }
     $parts[] = "</div>";
@@ -316,10 +434,10 @@ export func colorScheme(t as theme.Theme) {
 
 /**
  * The keyboard-help overlay.
- * @return {string} the `<div id="help">` element, hidden by default
+ * @return {string} the `<div id="cantrip-help">` element, hidden by default
  */
 export func helpPanel() {
-    return '<div id="help" hidden aria-label="Keyboard shortcuts"><table>' +
+    return '<div id="cantrip-help" hidden aria-label="Keyboard shortcuts"><table>' +
         '<tr><td><kbd>&rarr;</kbd> <kbd>space</kbd> <kbd>n</kbd></td><td>next slide</td></tr>' +
         '<tr><td><kbd>&larr;</kbd> <kbd>p</kbd></td><td>previous slide</td></tr>' +
         '<tr><td><kbd>home</kbd> <kbd>end</kbd></td><td>first / last slide</td></tr>' +
@@ -345,22 +463,24 @@ export func render(deck as slides.Deck, opts as Options) {
     def t as theme.Theme init pickTheme($deck, $opts);
     def s as theme.Stage init pickStage($deck, $opts);
     def motion as string init pickTransition($deck, $opts);
+    def start as Start init pickStart($deck, $opts);
     def total as int init len($deck.slides);
     def parts as list of string init [];
     $parts[] = "<!doctype html>";
     $parts[] = "<html lang=\"" + attrValue(language($deck)) + "\">";
     $parts[] = head($deck, $t, $s);
-    $parts[] = "<body><div id=\"progress\"></div>";
-    $parts[] = "<main id=\"deck\" data-w=\"" + convert.toString($s.width) + "\" data-h=\"" +
-        convert.toString($s.height) + "\" data-transition=\"" + $motion + "\">";
+    $parts[] = "<body><div id=\"cantrip-progress\"></div>";
+    $parts[] = "<main id=\"cantrip-deck\" data-w=\"" + convert.toString($s.width) + "\" data-h=\"" +
+        convert.toString($s.height) + "\" data-transition=\"" + $motion + "\"" +
+        startAttributes($start) + ">";
     for (def slide in $deck.slides) {
         $parts[] = section($slide, $total, $opts);
     }
     $parts[] = "</main>";
     $parts[] = overview($deck);
     if ($opts.notes) {
-        $parts[] = '<aside id="notes" hidden aria-label="Speaker notes">' +
-            "<h2>Speaker notes</h2><div id=\"notes-body\"></div></aside>";
+        $parts[] = '<aside id="cantrip-notes" hidden aria-label="Speaker notes">' +
+            "<h2>Speaker notes</h2><div id=\"cantrip-notes-body\"></div></aside>";
     }
     $parts[] = helpPanel();
     $parts[] = "<script>" + script() + "</script>";
@@ -389,38 +509,71 @@ export func script() {
     return '
 (function () {
     "use strict";
-    var deck = document.getElementById("deck");
-    var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+    // Every lookup is anchored at a child of body, so an {#id .class} list on
+    // a heading in the deck can never be taken for a part of the slideshow.
+    function part(id) { return document.querySelector("body > #cantrip-" + id); }
+    var deck = part("deck");
+    if (!deck) { return; }
+    var slides = Array.prototype.slice.call(deck.querySelectorAll(":scope > .cantrip-slide"));
     if (!slides.length) { return; }
-    var progress = document.getElementById("progress");
-    var notes = document.getElementById("notes");
-    var notesBody = document.getElementById("notes-body");
-    var overview = document.getElementById("overview");
-    var help = document.getElementById("help");
+    var progress = part("progress");
+    var notes = part("notes");
+    var notesBody = notes ? notes.querySelector(":scope > #cantrip-notes-body") : null;
+    var overview = part("overview");
+    var help = part("help");
     var stageW = parseInt(deck.dataset.w, 10) || 1280;
     var stageH = parseInt(deck.dataset.h, 10) || 720;
     var at = 0;
     var pending = "";
+    // How the page opens: data-notes, data-slide and data-overview on the deck
+    // (front matter or command line), overridden by ?notes=1|0 and
+    // ?overview=1|0 in the URL and by a #<slide> hash. An unknown URL value is
+    // ignored: it comes from the viewer, not from the author.
+    var query = new URLSearchParams(location.search);
+    function asked(name, fallback) {
+        var v = query.get(name);
+        if (v === "1") { return true; }
+        if (v === "0") { return false; }
+        return fallback;
+    }
+    // Notes the deck opens on a narrow or short window would cover the slide,
+    // so there they start closed unless the URL asks for them; s opens them.
+    var roomy = window.matchMedia("(min-width: 800px) and (min-height: 560px)").matches;
+    var startNotes = asked("notes", deck.dataset.notes === "open" && roomy);
+    var startOverview = asked("overview", deck.dataset.overview === "open");
+    var startSlide = (parseInt(deck.dataset.slide, 10) || 1) - 1;
 
     function clamp(n) { return Math.max(0, Math.min(slides.length - 1, n)); }
 
+    // While the notes are open the deck ends above them (the CSS reserves the
+    // height of the panel), so the slide is scaled into the space that is left.
     function fit() {
-        var k = Math.min(window.innerWidth / stageW, window.innerHeight / stageH);
+        var w = deck.clientWidth || window.innerWidth;
+        var h = deck.clientHeight || window.innerHeight;
+        var k = Math.min(w / stageW, h / stageH);
         slides.forEach(function (s) { s.style.transform = "scale(" + k + ")"; });
+    }
+
+    function setNotes(open) {
+        if (!notes) { return; }
+        notes.hidden = !open;
+        deck.classList.toggle("cantrip-notes-open", open);
+        if (open) { showNotes(); }
+        fit();
     }
 
     function showNotes() {
         if (!notes) { return; }
-        var src = slides[at].querySelector(".slide-notes");
+        var src = slides[at].querySelector(":scope > div.cantrip-slide-notes:last-child");
         notesBody.innerHTML = src ? src.innerHTML : "<p>No notes for this slide.</p>";
     }
 
     function show(n, push) {
         at = clamp(n);
         slides.forEach(function (s, i) {
-            s.classList.toggle("past", i < at);
-            s.classList.toggle("current", i === at);
-            s.classList.toggle("future", i > at);
+            s.classList.toggle("cantrip-past", i < at);
+            s.classList.toggle("cantrip-current", i === at);
+            s.classList.toggle("cantrip-future", i > at);
         });
         progress.style.width = ((at + 1) / slides.length * 100) + "%";
         if (notes && !notes.hidden) { showNotes(); }
@@ -433,7 +586,7 @@ export func script() {
 
     function fromHash() {
         var n = parseInt(location.hash.replace("#", ""), 10);
-        return isNaN(n) ? 0 : n - 1;
+        return isNaN(n) ? startSlide : n - 1;
     }
 
     function close() {
@@ -464,7 +617,7 @@ export func script() {
         } else if (k === "Home") { show(0); e.preventDefault(); }
         else if (k === "End") { show(slides.length - 1); e.preventDefault(); }
         else if (k === "o") { toggle(overview); }
-        else if (k === "s" && notes) { notes.hidden = !notes.hidden; showNotes(); }
+        else if (k === "s" && notes) { setNotes(notes.hidden); }
         else if (k === "f") {
             if (document.fullscreenElement) { document.exitFullscreen(); }
             else if (document.documentElement.requestFullscreen) {
@@ -475,7 +628,7 @@ export func script() {
     });
 
     overview.addEventListener("click", function (e) {
-        var hit = e.target.closest("[data-go]");
+        var hit = e.target.closest(".cantrip-thumb[data-go]");
         if (!hit) { return; }
         close();
         show(parseInt(hit.dataset.go, 10) - 1);
@@ -483,7 +636,7 @@ export func script() {
 
     overview.addEventListener("keydown", function (e) {
         if (e.key !== "Enter" && e.key !== " ") { return; }
-        var hit = e.target.closest("[data-go]");
+        var hit = e.target.closest(".cantrip-thumb[data-go]");
         if (!hit) { return; }
         e.preventDefault();
         // Handled here: the deck-wide handler would otherwise read the same
@@ -496,10 +649,12 @@ export func script() {
     help.addEventListener("click", close);
     window.addEventListener("resize", fit);
     window.addEventListener("hashchange", function () { show(fromHash(), false); });
+    setNotes(startNotes && !!notes);
     show(fromHash(), false);
+    if (startOverview) { overview.hidden = false; }
     // Transitions start after the first frame, so the deck opens on its slide.
     window.requestAnimationFrame(function () {
-        window.requestAnimationFrame(function () { deck.classList.add("ready"); });
+        window.requestAnimationFrame(function () { deck.classList.add("cantrip-ready"); });
     });
 })();
 ';
