@@ -19,6 +19,7 @@ use path;
 use strings;
 use lists;
 use convert;
+use regex;
 
 import "args.j" as args;
 import "pdf.j" as pdf;
@@ -54,6 +55,17 @@ export def struct Written {
 
 /** Image URL schemes that cannot be loaded from the filesystem. */
 export def const REMOTE as list of string init ["http://", "https://", "data:", "//"];
+
+/**
+ * The largest deck file read, in bytes (2 MiB); a larger one is refused. A
+ * 2,000-slide deck is about 270 KB, and a file of several MiB takes minutes and
+ * gigabytes to lay out, if the Markdown parser's own node budget does not
+ * refuse it first.
+ */
+export def const MAX_DECK_BYTES as int init 2097152;
+
+/** The most slides a deck may hold, across all its files. */
+export def const MAX_SLIDES as int init 2000;
 
 /**
  * Every verb the command accepts, in help order.
@@ -94,6 +106,9 @@ export func parser() {
     $p = args.flag($p, "bookmarks", "", "2", "PDF outline depth, 0 for none");
     $p = args.boolFlag($p, "notes", "n", "include speaker notes in the PDF");
     $p = args.boolFlag($p, "no-notes", "", "leave speaker notes out of the HTML");
+    $p = args.flag($p, "notes-panel", "", "", "HTML: speaker notes open or closed at start");
+    $p = args.flag($p, "start-slide", "", "", "HTML: the slide to open on, from 1");
+    $p = args.flag($p, "overview", "", "", "HTML: overview open or closed at start");
     $p = args.boolFlag($p, "no-numbers", "", "omit slide numbers");
     $p = args.boolFlag($p, "raw-html", "", "pass raw HTML in the Markdown through unescaped");
     $p = args.boolFlag($p, "verbose", "v", "report what was written");
@@ -113,6 +128,46 @@ export func isRemote(url as string) {
         }
     }
     return false;
+}
+
+/**
+ * Deck text made safe to print on a terminal.
+ *
+ * A title or an image path comes from the deck, which may be somebody else's,
+ * so control characters and the bidirectional overrides are shown as `\xNN`
+ * or `\uNNNN` escapes rather than written raw, where they could drive the
+ * terminal or reorder what it shows.
+ * @param text {string} text taken from a deck
+ * @return {string} the same text with every control character escaped
+ */
+export func printable(text as string) {
+    def out as list of string init [];
+    for (def ch in strings.chars($text)) {
+        def cp as int init convert.toCodepoint($ch);
+        if ($cp < 32 or ($cp >= 127 and $cp < 160)) {
+            $out[] = "\\x" + hexDigits($cp, 2);
+        } elseif (($cp >= 8206 and $cp <= 8207) or ($cp >= 8234 and $cp <= 8238) or
+            ($cp >= 8294 and $cp <= 8297)) {
+            $out[] = "\\u" + hexDigits($cp, 4);
+        } else {
+            $out[] = $ch;
+        }
+    }
+    return strings.join($out, "");
+}
+
+/**
+ * A number in upper-case hex, zero-padded.
+ * @param n {int} a non-negative number
+ * @param width {int} the least number of digits
+ * @return {string} the digits
+ */
+export func hexDigits(n as int, width as int) {
+    def digits as string init strings.upper(convert.toString($n, 16));
+    while (len($digits) < $width) {
+        $digits = "0" + $digits;
+    }
+    return $digits;
 }
 
 /**
@@ -156,7 +211,8 @@ export func stem(p as string) {
  * only slides, which is what lets a long talk live in one file per section.
  * @param paths {list of string} the input files, in order
  * @return {slides.Deck} the combined deck
- * @throws {Error} kind "cli" when a path is missing or is not a file
+ * @throws {Error} kind "cli" when a path is missing or is not a file, kind
+ *   "limit" when a file is over `MAX_DECK_BYTES` or the deck over `MAX_SLIDES`
  */
 export func readDeck(paths as list of string) {
     def out as slides.Deck init slides.Deck{
@@ -169,6 +225,7 @@ export func readDeck(paths as list of string) {
         slides: []
     };
     def first as bool init true;
+    def total as int init 0;
     for (def p in $paths) {
         if (not fs.exists($p)) {
             throw Error{kind: "cli", message: "no such file: " + $p, file: $p, line: 0, col: 0};
@@ -176,7 +233,32 @@ export func readDeck(paths as list of string) {
         if (not fs.isFile($p)) {
             throw Error{kind: "cli", message: "not a file: " + $p, file: $p, line: 0, col: 0};
         }
-        def one as slides.Deck init slides.parse(fs.readString($p));
+        def size as int init fs.stat($p).size;
+        if ($size > MAX_DECK_BYTES) {
+            throw Error{
+                kind: "limit",
+                message: $p + " is " + convert.toString($size) + " bytes; a deck may be at most " +
+                    convert.toString(MAX_DECK_BYTES) + " (2 MiB)",
+                file: $p,
+                line: 0,
+                col: 0
+            };
+        }
+        def text as string init fs.readString($p);
+        # Counted before the parse, which costs a Markdown parse per slide: a
+        # file of a million one-line slides would otherwise take hours to refuse.
+        $total = $total + slides.slideCount($text);
+        if ($total > MAX_SLIDES) {
+            throw Error{
+                kind: "limit",
+                message: "the deck has more than " + convert.toString(MAX_SLIDES) +
+                    " slides, the most it may have",
+                file: $p,
+                line: 0,
+                col: 0
+            };
+        }
+        def one as slides.Deck init slides.parse($text);
         if ($first) {
             $out = $one;
             $first = false;
@@ -188,16 +270,27 @@ export func readDeck(paths as list of string) {
 }
 
 /**
+ * Where an image path led: the file to read, or why there is none.
+ * @field path {string} the resolved file to read, "" when there is none
+ * @field reason {string} why nothing is read, "" when `path` is set
+ */
+export def struct Located {
+    path as string,
+    reason as string
+};
+
+/**
  * Load the pictures a deck refers to, so the PDF can draw them.
  *
- * A path is tried as written and then relative to the deck's own directory,
- * which is what makes `![x](img/a.png)` work from any working directory. A
- * remote URL, or a file that will not load, is skipped rather than fatal: the
- * PDF renderer falls back to the image's alt text, and losing a picture
- * should not lose the deck.
+ * A path is resolved against the deck's own directory, which is what makes
+ * `![x](img/a.png)` work from any working directory, and is read only when it
+ * stays inside that directory (see `locate`). A remote URL, a refused path, or
+ * a file that will not load is skipped rather than fatal: the PDF renderer
+ * falls back to the image's alt text, and losing a picture should not lose the
+ * deck.
  * @param deck {slides.Deck} the deck to scan
  * @param baseDir {string} the directory the first input file came from
- * @param verbose {bool} report each picture that was skipped
+ * @param verbose {bool} report each picture that was skipped, and why
  * @return {map of string to pdf.Image} pictures keyed by their source URL
  */
 export func loadImages(deck as slides.Deck, baseDir as string, verbose as bool) {
@@ -206,23 +299,23 @@ export func loadImages(deck as slides.Deck, baseDir as string, verbose as bool) 
     for (def url in pdfout.imageUrls($deck)) {
         if (isRemote($url)) {
             if ($verbose) {
-                io.eprintf("  skipped remote image %s\n", $url);
+                io.eprintf("  skipped remote image %s\n", printable($url));
             }
             continue;
         }
-        def found as string init locate($url, $baseDir);
-        if ($found == "") {
+        def where as Located init locate($url, $baseDir);
+        if ($where.path == "") {
             if ($verbose) {
-                io.eprintf("  image not found, using alt text: %s\n", $url);
+                io.eprintf("  image %s, using alt text: %s\n", $where.reason, printable($url));
             }
             continue;
         }
         try {
             $n = $n + 1;
-            $out[$url] = pdf.loadImage("img" + convert.toString($n), fs.readBytes($found));
+            $out[$url] = pdf.loadImage("img" + convert.toString($n), fs.readBytes($where.path));
         } catch (e) {
             if ($verbose) {
-                io.eprintf("  could not load %s: %s\n", $found, $e.message);
+                io.eprintf("  could not load %s: %s\n", printable($url), printable($e.message));
             }
         }
     }
@@ -230,23 +323,62 @@ export func loadImages(deck as slides.Deck, baseDir as string, verbose as bool) 
 }
 
 /**
- * Find an image file, as written or beside the deck.
+ * Find an image file beside the deck, refusing any path that leads out of it.
+ *
+ * A deck may come from somebody else, and the PDF it builds may be shared, so
+ * a picture is read only from the deck's own directory or below it. An
+ * absolute path is refused outright. A relative one is joined to the deck's
+ * directory, its `..` steps and symlinks resolved, and refused when the result
+ * lies outside that directory or is not a regular file. The working directory
+ * plays no part.
  * @param url {string} the path as written in the Markdown
  * @param baseDir {string} the directory the first input file came from
- * @return {string} the readable path, or "" when neither candidate exists
+ * @return {Located} the file to read, or the reason there is none
  */
 export func locate(url as string, baseDir as string) {
-    if (fs.exists($url) and fs.isFile($url)) {
-        return $url;
+    if (strings.trim($url) == "") {
+        return Located{path: "", reason: "not found"};
     }
-    if ($baseDir == "" or $baseDir == ".") {
-        return "";
+    if (path.isAbs($url)) {
+        return Located{path: "", reason: "refused (an absolute path)"};
     }
-    def beside as string init path.join($baseDir, $url);
-    if (fs.exists($beside) and fs.isFile($beside)) {
-        return $beside;
+    def dir as string init $baseDir;
+    if ($dir == "") {
+        $dir = ".";
     }
-    return "";
+    def candidate as string init path.join($dir, $url);
+    if (not fs.exists($candidate)) {
+        return Located{path: "", reason: "not found"};
+    }
+    def root as string init "";
+    def real as string init "";
+    try {
+        $root = fs.realpath($dir);
+        $real = fs.realpath($candidate);
+    } catch (e) {
+        return Located{path: "", reason: "not found"};
+    }
+    if (not within($real, $root)) {
+        return Located{path: "", reason: "refused (outside the deck's directory)"};
+    }
+    if (not fs.isFile($real)) {
+        return Located{path: "", reason: "refused (not a regular file)"};
+    }
+    return Located{path: $real, reason: ""};
+}
+
+/**
+ * Whether a resolved path lies strictly below a resolved directory.
+ * @param target {string} an absolute, symlink-free path
+ * @param root {string} an absolute, symlink-free directory
+ * @return {bool} true when `target` is inside `root`
+ */
+export func within(target as string, root as string) {
+    def prefix as string init $root;
+    if (not strings.endsWith($prefix, "/")) {
+        $prefix = $prefix + "/";
+    }
+    return strings.startsWith($target, $prefix);
 }
 
 /**
@@ -263,7 +395,42 @@ export func htmlOptions(r as args.Result) {
     $out.numbers = not args.asBool($r, "no-numbers");
     $out.rawHtml = args.asBool($r, "raw-html");
     $out.transition = args.asString($r, "transition");
+    $out.startNotes = args.asString($r, "notes-panel");
+    $out.startSlide = args.asString($r, "start-slide");
+    $out.startOverview = args.asString($r, "overview");
     return $out;
+}
+
+/**
+ * Check the slideshow's start flags, `--notes-panel`, `--overview` and
+ * `--start-slide`. Whether the slide exists is checked against the deck later.
+ * @param r {args.Result} the parsed command line
+ * @throws {Error} kind "cli" on a value other than open / closed, or a slide
+ *     number that is not a whole number from 1
+ */
+export func startFlags(r as args.Result) {
+    for (def name in ["notes-panel", "overview"]) {
+        def v as string init strings.trim(args.asString($r, $name));
+        if ($v != "" and $v != "open" and $v != "closed") {
+            throw Error{
+                kind: "cli",
+                message: "--" + $name + " wants open or closed, got \"" + $v + "\"",
+                file: "",
+                line: 0,
+                col: 0
+            };
+        }
+    }
+    def slide as string init strings.trim(args.asString($r, "start-slide"));
+    if ($slide != "" and not regex.matches('^[1-9][0-9]{0,5}$', $slide)) {
+        throw Error{
+            kind: "cli",
+            message: "--start-slide wants a slide number from 1, got \"" + $slide + "\"",
+            file: "",
+            line: 0,
+            col: 0
+        };
+    }
 }
 
 /**
@@ -437,7 +604,7 @@ export func overflowMessage(slideCount as int, pages as int) {
  * @return {int} always `OK`
  */
 export func report(deck as slides.Deck) {
-    io.printf("%s\n", slides.describe($deck));
+    io.printf("%s\n", printable(slides.describe($deck)));
     for (def slide in $deck.slides) {
         def title as string init $slide.title;
         if ($title == "") {
@@ -447,7 +614,7 @@ export func report(deck as slides.Deck) {
         if ($slide.notes != "") {
             $mark = "*";
         }
-        io.printf("  %d|pad=2 %s %s\n", $slide.number, $mark, $title);
+        io.printf("  %d|pad=2 %s %s\n", $slide.number, $mark, printable($title));
     }
     return OK;
 }
@@ -537,10 +704,21 @@ export func run(argv as list of string) {
         io.eprintf("%s: %s needs at least one Markdown file\n", PROGRAM, $verb);
         return MISUSE;
     }
+    # A malformed flag value is a mistake in the command line, like an
+    # unknown flag, so it is misuse whichever verb it came with.
+    try {
+        bookmarkDepth(args.asString($r, "bookmarks"));
+        startFlags($r);
+    } catch (e) {
+        io.eprintf("%s: %s\n", PROGRAM, $e.message);
+        return MISUSE;
+    }
     try {
         return dispatch($verb, $files, $r);
     } catch (e) {
-        io.eprintf("%s: %s\n", PROGRAM, $e.message);
+        # The message can quote the deck (a theme name, a path), so it is
+        # escaped like any other deck text before it reaches the terminal.
+        io.eprintf("%s: %s\n", PROGRAM, printable($e.message));
         return FAILED;
     }
 }

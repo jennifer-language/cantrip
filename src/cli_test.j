@@ -25,13 +25,16 @@ func sample() {
 }
 
 /**
- * Write a deck into a fresh temporary directory.
+ * Write a deck into a test's temporary directory.
+ *
+ * Each test makes its own directory with `fs.makeTempDir` and removes it with
+ * a `defer`, so a run leaves nothing behind, a failing one included.
+ * @param dir {string} the directory to write into
  * @param body {string} the Markdown to write
  * @param name {string} the file's base name, extension included
  * @return {string} the path written
  */
-func writeDeck(body as string, name as string) {
-    def dir as string init fs.makeTempDir();
+func writeDeck(dir as string, body as string, name as string) {
     def target as string init path.join($dir, $name);
     fs.writeString($target, $body);
     return $target;
@@ -165,7 +168,9 @@ func testOutputPath() {
 
 /** Reading one file gives its deck. */
 func testReadDeck() {
-    def target as string init writeDeck(sample(), "deck.md");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
     def deck as slides.Deck init readDeck([$target]);
     testing.assertEqual($deck.title, "Fixture");
     testing.assertEqual($deck.theme, "solar");
@@ -175,6 +180,7 @@ func testReadDeck() {
 /** Several files become one deck, numbered straight through. */
 func testReadDeckSeveralFiles() {
     def dir as string init fs.makeTempDir();
+    defer fs.removeAll($dir);
     def one as string init path.join($dir, "a.md");
     def two as string init path.join($dir, "b.md");
     fs.writeString($one, "---\ntitle: First\n---\n# A1\n---\n# A2\n");
@@ -188,9 +194,41 @@ func testReadDeckSeveralFiles() {
 
 /** A missing path or a directory is a catchable cli error. */
 func testReadDeckRejectsBadPaths() {
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
     testing.assertEqual(readFailure(["/nonexistent/nope.md"]), "cli");
-    testing.assertEqual(readFailure([fs.makeTempDir()]), "cli");
-    testing.assertEqual(readFailure([writeDeck(sample(), "ok.md")]), "");
+    testing.assertEqual(readFailure([$tmp]), "cli");
+    testing.assertEqual(readFailure([writeDeck($tmp, sample(), "ok.md")]), "");
+}
+
+/** A deck file over the size cap is refused before it is read, as a limit. */
+func testReadDeckRefusesAnOversizedFile() {
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def big as string init writeDeck(
+        $tmp,
+        "# A\n\n" + strings.repeat("x", MAX_DECK_BYTES),
+        "big.md");
+    testing.assertEqual(readFailure([$big]), "limit");
+    testing.assertEqual(run(["cantrip", "info", $big]), FAILED);
+    def edge as string init writeDeck($tmp, strings.repeat("x", MAX_DECK_BYTES), "edge.md");
+    testing.assertEqual(readFailure([$edge]), "");
+}
+
+/**
+ * A deck over the slide cap is refused as a limit, counted across all its
+ * files, before any slide is parsed.
+ */
+func testReadDeckRefusesTooManySlides() {
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def half as string init strings.repeat("a\n\n---\n\n", MAX_SLIDES // 2);
+    def one as string init writeDeck($tmp, $half, "one.md");
+    def two as string init writeDeck($tmp, $half + "b\n", "two.md");
+    testing.assertEqual(readFailure([$one]), "");
+    testing.assertEqual(readFailure([$one, $two]), "limit");
+    testing.assertEqual(run(["cantrip", "html", $one, $two]), FAILED);
+    testing.assertFalse(fs.exists(path.join($tmp, "one.html")));
 }
 
 /** Reading no files gives an empty deck rather than an error. */
@@ -198,27 +236,97 @@ func testReadDeckNoFiles() {
     testing.assertEqual(len(readDeck([]).slides), 0);
 }
 
-/** An image is found as written, or beside the deck. */
+/** An image is found beside the deck, whatever the working directory. */
 func testLocate() {
     def dir as string init fs.makeTempDir();
+    defer fs.removeAll($dir);
     def pic as string init path.join($dir, "fig.png");
     fs.writeBytes($pic, onePixelPng());
-    testing.assertEqual(locate($pic, ""), $pic);
-    testing.assertEqual(locate("fig.png", $dir), $pic);
-    testing.assertEqual(locate("missing.png", $dir), "");
-    testing.assertEqual(locate("fig.png", ""), "");
-    testing.assertEqual(locate("fig.png", "."), "");
+    def real as string init fs.realpath($pic);
+    testing.assertEqual(locate("fig.png", $dir).path, $real);
+    testing.assertEqual(locate("fig.png", $dir).reason, "");
+    fs.mkdir(path.join($dir, "x"));
+    testing.assertEqual(locate("./x/../fig.png", $dir).path, $real);
+    testing.assertEqual(locate("../" + path.base($dir) + "/fig.png", $dir).path, $real);
+    testing.assertEqual(locate("missing.png", $dir).reason, "not found");
+    testing.assertEqual(locate("", $dir).reason, "not found");
 }
 
-/** A directory is not a usable image. */
+/** A path that leads out of the deck's directory is refused, and says why. */
+func testLocateRefusesPathsOutOfTheDeck() {
+    def root as string init fs.makeTempDir();
+    defer fs.removeAll($root);
+    def dir as string init path.join($root, "deck");
+    fs.mkdir($dir);
+    def outside as string init path.join($root, "secret.png");
+    fs.writeBytes($outside, onePixelPng());
+    fs.symlink($outside, path.join($dir, "link.png"));
+    testing.assertEqual(locate($outside, $dir).reason, "refused (an absolute path)");
+    testing.assertEqual(
+        locate("../secret.png", $dir).reason,
+        "refused (outside the deck's directory)");
+    testing.assertEqual(locate("link.png", $dir).reason, "refused (outside the deck's directory)");
+    testing.assertEqual(locate("..", $dir).reason, "refused (outside the deck's directory)");
+}
+
+/** A directory or a pipe is not a usable image. */
 func testLocateIgnoresDirectories() {
     def dir as string init fs.makeTempDir();
-    testing.assertEqual(locate($dir, ""), "");
+    defer fs.removeAll($dir);
+    fs.mkdir(path.join($dir, "sub"));
+    fs.mkfifo(path.join($dir, "pipe.png"));
+    testing.assertEqual(locate("sub", $dir).reason, "refused (not a regular file)");
+    testing.assertEqual(locate("pipe.png", $dir).reason, "refused (not a regular file)");
+}
+
+/** A path is inside a directory only strictly below it. */
+func testWithin() {
+    testing.assertTrue(within("/a/b/c.png", "/a/b"));
+    testing.assertTrue(within("/a/b/c.png", "/a/b/"));
+    testing.assertTrue(within("/x.png", "/"));
+    testing.assertFalse(within("/a/bc.png", "/a/b"));
+    testing.assertFalse(within("/a/b", "/a/b"));
+    testing.assertFalse(within("/a", "/a/b"));
+}
+
+/**
+ * The PDF reads pictures from the deck's directory and below only: one
+ * reached by `..`, by an absolute path, or through a symlink out of the
+ * directory keeps its alt text, so an untrusted deck cannot pull another file
+ * into the PDF it builds.
+ */
+func testLoadImagesStaysInsideTheDeck() {
+    def root as string init fs.makeTempDir();
+    defer fs.removeAll($root);
+    def dir as string init path.join($root, "deck");
+    fs.mkdirAll(path.join($dir, "img"));
+    def outside as string init path.join($root, "secret.png");
+    fs.writeBytes($outside, onePixelPng());
+    fs.writeBytes(path.join($dir, "img", "ok.png"), onePixelPng());
+    fs.symlink($outside, path.join($dir, "link.png"));
+    fs.symlink(path.join($dir, "img", "ok.png"), path.join($dir, "inner.png"));
+    def urls as list of string init [
+        "img/ok.png",
+        "inner.png",
+        "../secret.png",
+        $outside,
+        "link.png"
+    ];
+    def body as list of string init ["# H"];
+    for (def url in $urls) {
+        $body[] = "![x](" + $url + ")";
+    }
+    def target as string init writeDeck($dir, strings.join($body, "\n\n"), "deck.md");
+    def got as map of string to pdf.Image init loadImages(readDeck([$target]), $dir, true);
+    testing.assertTrue(maps.has($got, "img/ok.png"));
+    testing.assertTrue(maps.has($got, "inner.png"));
+    testing.assertEqual(len(maps.keys($got)), 2);
 }
 
 /** A picture beside the deck is loaded and keyed by its source URL. */
 func testLoadImages() {
     def dir as string init fs.makeTempDir();
+    defer fs.removeAll($dir);
     def target as string init path.join($dir, "deck.md");
     fs.writeString($target, "# H\n\n![a pic](fig.png)\n");
     fs.writeBytes(path.join($dir, "fig.png"), onePixelPng());
@@ -230,6 +338,7 @@ func testLoadImages() {
 /** A remote or missing picture is skipped, not fatal. */
 func testLoadImagesSkipsWhatItCannotRead() {
     def dir as string init fs.makeTempDir();
+    defer fs.removeAll($dir);
     def target as string init path.join($dir, "deck.md");
     fs.writeString($target, "# H\n\n![a](https://example.com/a.png)\n\n![b](missing.png)\n");
     def got as map of string to pdf.Image init loadImages(readDeck([$target]), $dir, false);
@@ -238,7 +347,9 @@ func testLoadImagesSkipsWhatItCannotRead() {
 
 /** A deck with no pictures loads none. */
 func testLoadImagesNone() {
-    def target as string init writeDeck(sample(), "deck.md");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
     def got as map of string to pdf.Image init loadImages(readDeck([$target]), ".", false);
     testing.assertEqual(len(maps.keys($got)), 0);
 }
@@ -303,7 +414,9 @@ func testBookmarkDepth() {
 
 /** An empty deck is refused before anything is written. */
 func testRequireSlides() {
-    requireSlides(readDeck([writeDeck(sample(), "deck.md")]));
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    requireSlides(readDeck([writeDeck($tmp, sample(), "deck.md")]));
     def kind as string init "";
     try {
         requireSlides(slides.parse("---\ntitle: T\n---\n"));
@@ -316,8 +429,9 @@ func testRequireSlides() {
 /** Writing the HTML produces a complete document on disk. */
 func testWriteHtml() {
     def dir as string init fs.makeTempDir();
+    defer fs.removeAll($dir);
     def target as string init path.join($dir, "out.html");
-    def deck as slides.Deck init readDeck([writeDeck(sample(), "deck.md")]);
+    def deck as slides.Deck init readDeck([writeDeck($dir, sample(), "deck.md")]);
     def w as Written init writeHtml($deck, parsed(["html", "a.md"]), $target);
     testing.assertTrue($w.bytes > 1000);
     testing.assertEqual($w.pages, 0);
@@ -330,8 +444,9 @@ func testWriteHtml() {
 /** Writing the PDF produces a real PDF on disk. */
 func testWritePdf() {
     def dir as string init fs.makeTempDir();
+    defer fs.removeAll($dir);
     def target as string init path.join($dir, "out.pdf");
-    def deck as slides.Deck init readDeck([writeDeck(sample(), "deck.md")]);
+    def deck as slides.Deck init readDeck([writeDeck($dir, sample(), "deck.md")]);
     def w as Written init writePdf($deck, parsed(["pdf", "a.md"]), $target, $dir);
     testing.assertTrue($w.bytes > 500);
     testing.assertEqual($w.pages, 2);
@@ -346,6 +461,7 @@ func testWritePdf() {
  */
 func testWritePdfCountsPicturePages() {
     def dir as string init fs.makeTempDir();
+    defer fs.removeAll($dir);
     def deck as string init path.join($dir, "deck.md");
     fs.writeString($deck, "# Tall\n\n![tall](tall.png)\n\nText under it.\n\n---\n\n# Two\n");
     fs.writeBytes(path.join($dir, "tall.png"), tallPng());
@@ -359,7 +475,9 @@ func testWritePdfCountsPicturePages() {
 
 /** An output may not land on one of the inputs, however it is spelled. */
 func testGuardInputs() {
-    def target as string init writeDeck(sample(), "deck.md");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
     def kind as string init "";
     try {
         guardInputs(path.join(path.dir($target), ".", "deck.md"), [$target]);
@@ -368,12 +486,14 @@ func testGuardInputs() {
     }
     testing.assertEqual($kind, "cli");
     guardInputs(path.join(path.dir($target), "deck.html"), [$target]);
-    guardInputs(writeDeck("x", "other.md"), [$target]);
+    guardInputs(writeDeck($tmp, "x", "other.md"), [$target]);
 }
 
 /** `-o` naming the input is refused, and the input survives. */
 func testRunRefusesToOverwriteInput() {
-    def target as string init writeDeck(sample(), "deck.md");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
     testing.assertEqual(run(["cantrip", "html", $target, "-o", $target]), FAILED);
     testing.assertEqual(fs.readString($target), sample());
 }
@@ -389,7 +509,9 @@ func testOverflowMessage() {
 
 /** Reporting a deck lists every slide and never fails. */
 func testReport() {
-    testing.assertEqual(report(readDeck([writeDeck(sample(), "deck.md")])), OK);
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    testing.assertEqual(report(readDeck([writeDeck($tmp, sample(), "deck.md")])), OK);
     testing.assertEqual(report(slides.parse("")), OK);
 }
 
@@ -400,7 +522,9 @@ func testListThemes() {
 
 /** The overflow warning is advisory and never changes the outcome. */
 func testWarnOverflow() {
-    def deck as slides.Deck init readDeck([writeDeck(sample(), "deck.md")]);
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def deck as slides.Deck init readDeck([writeDeck($tmp, sample(), "deck.md")]);
     warnOverflow($deck, 2);
     warnOverflow($deck, 5);
 }
@@ -413,14 +537,18 @@ func testAnnounce() {
 
 /** `info` reads the deck and writes nothing. */
 func testDispatchInfo() {
-    def target as string init writeDeck(sample(), "deck.md");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
     testing.assertEqual(dispatch("info", [$target], parsed(["info", $target])), OK);
     testing.assertFalse(fs.exists(stem($target) + ".html"));
 }
 
 /** `html` writes the slideshow beside its input. */
 func testDispatchHtml() {
-    def target as string init writeDeck(sample(), "deck.md");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
     testing.assertEqual(dispatch("html", [$target], parsed(["html", $target])), OK);
     testing.assertTrue(fs.isFile(stem($target) + ".html"));
     testing.assertFalse(fs.exists(stem($target) + ".pdf"));
@@ -428,7 +556,9 @@ func testDispatchHtml() {
 
 /** `pdf` writes the PDF beside its input. */
 func testDispatchPdf() {
-    def target as string init writeDeck(sample(), "deck.md");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
     testing.assertEqual(dispatch("pdf", [$target], parsed(["pdf", $target])), OK);
     testing.assertTrue(fs.isFile(stem($target) + ".pdf"));
     testing.assertFalse(fs.exists(stem($target) + ".html"));
@@ -436,7 +566,9 @@ func testDispatchPdf() {
 
 /** `build` writes both, sharing one stem. */
 func testDispatchBuild() {
-    def target as string init writeDeck(sample(), "deck.md");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
     testing.assertEqual(dispatch("build", [$target], parsed(["build", $target])), OK);
     testing.assertTrue(fs.isFile(stem($target) + ".html"));
     testing.assertTrue(fs.isFile(stem($target) + ".pdf"));
@@ -444,8 +576,10 @@ func testDispatchBuild() {
 
 /** For `build`, `--out` is the stem both outputs hang off. */
 func testDispatchBuildHonoursOut() {
-    def target as string init writeDeck(sample(), "deck.md");
-    def base as string init path.join(fs.makeTempDir(), "named");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
+    def base as string init path.join($tmp, "named");
     def r as args.Result init parsed(["build", $target, "-o", $base]);
     testing.assertEqual(dispatch("build", [$target], $r), OK);
     testing.assertTrue(fs.isFile($base + ".html"));
@@ -454,8 +588,10 @@ func testDispatchBuildHonoursOut() {
 
 /** For `html` and `pdf`, `--out` is the exact file. */
 func testDispatchHonoursOut() {
-    def target as string init writeDeck(sample(), "deck.md");
-    def named as string init path.join(fs.makeTempDir(), "exact.htm");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
+    def named as string init path.join($tmp, "exact.htm");
     def r as args.Result init parsed(["html", $target, "-o", $named]);
     testing.assertEqual(dispatch("html", [$target], $r), OK);
     testing.assertTrue(fs.isFile($named));
@@ -463,7 +599,9 @@ func testDispatchHonoursOut() {
 
 /** An unknown theme reaches the caller as a theme error. */
 func testDispatchPropagatesThemeError() {
-    def target as string init writeDeck(sample(), "deck.md");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
     def kind as string init "";
     try {
         dispatch("html", [$target], parsed(["html", $target, "--theme", "nope"]));
@@ -512,44 +650,68 @@ func testRunMissingFile() {
 
 /** An unknown transition is a failure, like an unknown theme. */
 func testRunBadTransition() {
-    def target as string init writeDeck(sample(), "deck.md");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
     testing.assertEqual(run(["cantrip", "html", $target, "--transition", "spin"]), FAILED);
 }
 
 /** An unknown theme is a failure, with a message rather than a stack. */
 func testRunBadTheme() {
-    def target as string init writeDeck(sample(), "deck.md");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
     testing.assertEqual(run(["cantrip", "html", $target, "--theme", "nope"]), FAILED);
 }
 
 /** A deck with no slides is a failure, and writes nothing. */
 func testRunEmptyDeck() {
-    def target as string init writeDeck("---\ntitle: T\n---\n", "empty.md");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, "---\ntitle: T\n---\n", "empty.md");
     testing.assertEqual(run(["cantrip", "html", $target]), FAILED);
     testing.assertFalse(fs.exists(stem($target) + ".html"));
 }
 
 /** A whole run writes both outputs and reports success. */
 func testRunBuild() {
-    def target as string init writeDeck(sample(), "deck.md");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
     testing.assertEqual(run(["cantrip", "build", $target, "-v"]), OK);
     testing.assertTrue(fs.isFile(stem($target) + ".html"));
     testing.assertTrue(fs.isFile(stem($target) + ".pdf"));
 }
 
-/** A bad `--bookmarks` stops `build` before it writes the HTML half. */
+/** A bad `--bookmarks` is misuse, refused before `build` writes the HTML half. */
 func testRunBuildBadBookmarksWritesNothing() {
-    def target as string init writeDeck(sample(), "deck.md");
-    testing.assertEqual(run(["cantrip", "build", $target, "--bookmarks", "x"]), FAILED);
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
+    testing.assertEqual(run(["cantrip", "build", $target, "--bookmarks", "x"]), MISUSE);
+    testing.assertEqual(run(["cantrip", "html", $target, "--bookmarks", "9"]), MISUSE);
     testing.assertFalse(fs.exists(stem($target) + ".html"));
     testing.assertFalse(fs.exists(stem($target) + ".pdf"));
     testing.assertEqual(run(["cantrip", "build", $target, "--bookmarks", "1"]), OK);
     testing.assertTrue(fs.isFile(stem($target) + ".html"));
 }
 
+/** Control characters and bidi overrides from a deck are shown escaped. */
+func testPrintable() {
+    testing.assertEqual(printable("plain é 日本 -> ok"), "plain é 日本 -> ok");
+    testing.assertEqual(printable("a\u001B[31mb"), "a\\x1B[31mb");
+    testing.assertEqual(printable("x\ny\t\r"), "x\\x0Ay\\x09\\x0D");
+    testing.assertEqual(printable("\u0007\u007F\u009B"), "\\x07\\x7F\\x9B");
+    testing.assertEqual(printable("\u202Eevil\u2066"), "\\u202Eevil\\u2066");
+    testing.assertEqual(hexDigits(10, 2), "0A");
+    testing.assertEqual(hexDigits(8238, 4), "202E");
+}
+
 /** `info` through the whole run reports success. */
 func testRunInfo() {
-    def target as string init writeDeck(sample(), "deck.md");
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
     testing.assertEqual(run(["cantrip", "info", $target]), OK);
 }
 
@@ -580,4 +742,80 @@ func onePixelPng() {
         "base64",
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGMAAQAABQAB" +
             "lpSm1gAAAABJRU5ErkJggg==");
+}
+
+/** The start flags reach the HTML options. */
+func testHtmlOptionsStart() {
+    def none as htmlout.Options init htmlOptions(parsed(["html", "a.md"]));
+    testing.assertEqual($none.startNotes, "");
+    def r as args.Result init parsed([
+        "html",
+        "a.md",
+        "--notes-panel",
+        "open",
+        "--start-slide",
+        "2",
+        "--overview",
+        "closed"
+    ]);
+    def got as htmlout.Options init htmlOptions($r);
+    testing.assertEqual($got.startNotes, "open");
+    testing.assertEqual($got.startSlide, "2");
+    testing.assertEqual($got.startOverview, "closed");
+}
+
+/** A bad start flag is misuse, exit 2, before anything is written. */
+func testRunBadStartFlags() {
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
+    testing.assertEqual(run(["cantrip", "build", $target, "--notes-panel", "yes"]), MISUSE);
+    testing.assertEqual(run(["cantrip", "html", $target, "--overview", "OPEN!"]), MISUSE);
+    testing.assertEqual(run(["cantrip", "html", $target, "--start-slide", "0"]), MISUSE);
+    testing.assertEqual(run(["cantrip", "html", $target, "--start-slide", "two"]), MISUSE);
+    testing.assertFalse(fs.exists(stem($target) + ".html"));
+    # Valid as flags, but wrong for this deck: a failed build, exit 1.
+    testing.assertEqual(run(["cantrip", "html", $target, "--start-slide", "3"]), FAILED);
+    testing.assertEqual(
+        run(["cantrip", "html", $target, "--no-notes", "--notes-panel", "open"]),
+        FAILED);
+    testing.assertFalse(fs.exists(stem($target) + ".html"));
+    testing.assertEqual(
+        run(["cantrip", "html", $target, "--notes-panel", "open", "--start-slide", "2"]),
+        OK);
+    testing.assertContains(
+        fs.readString(stem($target) + ".html"),
+        "data-notes=\"open\" data-slide=\"2\"");
+}
+
+/** The start flags take open / closed and a slide number from 1. */
+func testStartFlags() {
+    startFlags(parsed(["html", "a.md"]));
+    startFlags(parsed([
+        "html",
+        "a.md",
+        "--notes-panel",
+        "closed",
+        "--overview",
+        "open",
+        "--start-slide",
+        "12"
+    ]));
+    for (def bad in [
+        ["--notes-panel", "Open"],
+        ["--overview", "1"],
+        ["--start-slide", "-1"],
+        ["--start-slide", "1.5"]
+    ]) {
+        def argv as list of string init ["html", "a.md"];
+        $argv[] = $bad[0];
+        $argv[] = $bad[1];
+        def kind as string init "";
+        try {
+            startFlags(parsed($argv));
+        } catch (e) {
+            $kind = $e.kind;
+        }
+        testing.assertEqual($kind, "cli");
+    }
 }

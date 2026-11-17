@@ -343,6 +343,21 @@ func testParseSkipsByteOrderMark() {
     testing.assertEqual(parse(BOM + "# Bare\n").slides[0].title, "Bare");
 }
 
+/** The cheap count agrees with a full parse, front matter and BOM included. */
+func testSlideCount() {
+    for (def src in [
+        "",
+        "---\ntitle: T\n---\n",
+        "# A\n---\n# B\n---\n",
+        BOM + "---\nt: x\n---\n# A"
+    ]) {
+        testing.assertEqual(slideCount($src), len(parse($src).slides));
+    }
+    testing.assertEqual(slideCount("# A\n\n```\n---\n```\n\n---\n\n# B"), 2);
+    testing.assertEqual(withoutBom(BOM + "x"), "x");
+    testing.assertEqual(withoutBom("x"), "x");
+}
+
 /** With no `title:` the deck borrows the first slide's heading. */
 func testParseBorrowsTitle() {
     def deck as Deck init parse("# Borrowed\n\n---\n\n# Later");

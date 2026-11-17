@@ -553,11 +553,7 @@ export func heading(body as string) {
  * @return {Deck} the parsed deck, possibly with no slides
  */
 export func parse(source as string) {
-    def text as string init $source;
-    if (strings.startsWith($text, BOM)) {
-        $text = strings.substring($text, 1, len($text));
-    }
-    def split as Split init frontMatter($text);
+    def split as Split init frontMatter(withoutBom($source));
     def deck as Deck init Deck{
         title: metaOr($split.meta, "title", ""),
         author: metaOr($split.meta, "author", ""),
@@ -588,6 +584,33 @@ export func parse(source as string) {
         $deck.title = $deck.slides[0].title;
     }
     return $deck;
+}
+
+/**
+ * How many slides a source holds, without parsing them.
+ *
+ * This is the count `parse` arrives at, found by cutting the source on its
+ * separators alone, so a caller can refuse an oversized deck before paying for
+ * the Markdown parse of every slide.
+ * @param source {string} the whole Markdown source
+ * @return {int} the number of slides `parse` would return
+ */
+export func slideCount(source as string) {
+    return len(chunks(frontMatter(withoutBom($source)).body));
+}
+
+/**
+ * The source with a leading byte-order mark dropped.
+ *
+ * Left in place, the mark would hide the front-matter fence on line 1.
+ * @param source {string} the whole Markdown source
+ * @return {string} the source without its byte-order mark
+ */
+export func withoutBom(source as string) {
+    if (strings.startsWith($source, BOM)) {
+        return strings.substring($source, 1, len($source));
+    }
+    return $source;
 }
 
 /**
