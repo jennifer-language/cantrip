@@ -6,8 +6,8 @@
  * Presentation appearance: the named themes and the stage each deck is laid
  * out on.
  *
- * A theme is a palette plus three font stacks; a stage is the slide's pixel
- * geometry and the PDF page size that matches it. Both are plain values, so a
+ * A theme is a light and a dark palette plus three font stacks; a stage is the
+ * slide's pixel geometry and the PDF page size that matches it. Both are plain values, so a
  * renderer asks for one and never decides what it looks like.
  * @module theme
  * @author mplx <mplx@jennifer-lang.dev>
@@ -21,14 +21,19 @@ use convert;
 /** The theme used when a deck names none. */
 export def const DEFAULT_THEME as string init "plain";
 
+/** The mode a deck opens in when it names none. */
+export def const DEFAULT_MODE as string init "light";
+
 /** The stage used when a deck names no ratio. */
 export def const DEFAULT_RATIO as string init "16:9";
 
 /**
- * A theme's palette and fonts.
+ * One palette of a theme, with its fonts. Every theme has two, a light and a
+ * dark one, under the same name; the fonts and the radius are the theme's and
+ * the same in both.
  * @field name {string} the theme's name, as a caller would ask for it
- * @field description {string} one line on what it looks like, for `themes`
- * @field dark {bool} whether the palette is dark-on-light or light-on-dark
+ * @field description {string} one line on what this palette looks like, for `themes`
+ * @field dark {bool} whether this is the theme's dark palette
  * @field background {string} slide background colour
  * @field foreground {string} body text colour
  * @field heading {string} heading colour on screen
@@ -124,7 +129,7 @@ export func all() {
             radius: 8
         },
         Theme{
-            name: "midnight",
+            name: "plain",
             description: "Near-black with a soft blue accent; good in a dark room, hard on a " +
                 "sunlit one.",
             dark: true,
@@ -157,6 +162,45 @@ export func all() {
             quoteBar: "#d3cbb7",
             printCodeBg: "#eee8d5",
             printQuoteBar: "#d3cbb7",
+            headingFont: SANS,
+            bodyFont: SANS,
+            monoFont: MONO,
+            radius: 8
+        },
+        Theme{
+            name: "solar",
+            description: "The deep Solarized-dark ground with the same gold accent.",
+            dark: true,
+            background: "#002b36",
+            foreground: "#eee8d5",
+            heading: "#b58900",
+            accent: "#b58900",
+            muted: "#93a1a1",
+            codeBg: "#073642",
+            codeFg: "#eee8d5",
+            quoteBar: "#2f505a",
+            printCodeBg: "#eee8d5",
+            printQuoteBar: "#d3cbb7",
+            headingFont: SANS,
+            bodyFont: SANS,
+            monoFont: MONO,
+            radius: 8
+        },
+        Theme{
+            name: "contrast",
+            description: "Pure white, pure black, deep-blue accent; for a bad projector in a " +
+                "bright room.",
+            dark: false,
+            background: "#ffffff",
+            foreground: "#000000",
+            heading: "#0033b3",
+            accent: "#0033b3",
+            muted: "#3c3c3c",
+            codeBg: "#ececec",
+            codeFg: "#000000",
+            quoteBar: "#5a5a5a",
+            printCodeBg: "#f0f0f0",
+            printQuoteBar: "#5a5a5a",
             headingFont: SANS,
             bodyFont: SANS,
             monoFont: MONO,
@@ -202,7 +246,7 @@ export func all() {
             radius: 5
         },
         Theme{
-            name: "carbon-dark",
+            name: "carbon",
             description: "The dark palette of carbon.",
             dark: true,
             background: "#08090b",
@@ -240,7 +284,7 @@ export func all() {
             radius: 3
         },
         Theme{
-            name: "ember-dark",
+            name: "ember",
             description: "The dark palette of ember.",
             dark: true,
             background: "#0a0a0a",
@@ -278,7 +322,7 @@ export func all() {
             radius: 7
         },
         Theme{
-            name: "grimoire-dark",
+            name: "grimoire",
             description: "The dark palette of grimoire.",
             dark: true,
             background: "#171412",
@@ -316,7 +360,7 @@ export func all() {
             radius: 4
         },
         Theme{
-            name: "ivy-dark",
+            name: "ivy",
             description: "The dark palette of ivy.",
             dark: true,
             background: "#10130f",
@@ -355,7 +399,7 @@ export func all() {
             radius: 6
         },
         Theme{
-            name: "meridian-dark",
+            name: "meridian",
             description: "The dark palette of meridian.",
             dark: true,
             background: "#0d1b30",
@@ -393,7 +437,7 @@ export func all() {
             radius: 6
         },
         Theme{
-            name: "nordic-dark",
+            name: "nordic",
             description: "The dark palette of nordic.",
             dark: true,
             background: "#2e3440",
@@ -431,7 +475,7 @@ export func all() {
             radius: 6
         },
         Theme{
-            name: "obsidian-dark",
+            name: "obsidian",
             description: "The dark palette of obsidian.",
             dark: true,
             background: "#0d1017",
@@ -469,7 +513,7 @@ export func all() {
             radius: 8
         },
         Theme{
-            name: "orchid-dark",
+            name: "orchid",
             description: "The dark palette of orchid.",
             dark: true,
             background: "#1a1220",
@@ -508,7 +552,7 @@ export func all() {
             radius: 5
         },
         Theme{
-            name: "sepia-dark",
+            name: "sepia",
             description: "The dark palette of sepia.",
             dark: true,
             background: "#221a12",
@@ -547,7 +591,7 @@ export func all() {
             radius: 2
         },
         Theme{
-            name: "terminal-dark",
+            name: "terminal",
             description: "The dark palette of terminal.",
             dark: true,
             background: "#07090a",
@@ -575,9 +619,48 @@ export func all() {
 export func names() {
     def out as list of string init [];
     for (def t in all()) {
-        $out[] = $t.name;
+        if (not lists.contains($out, $t.name)) {
+            $out[] = $t.name;
+        }
     }
     return $out;
+}
+
+/**
+ * The modes every theme comes in.
+ * @return {list of string} the names `theme` accepts as a mode
+ */
+export func modes() {
+    return ["light", "dark"];
+}
+
+/**
+ * A theme error: kind "theme".
+ * @param message {string} what is wrong
+ * @return {Error} the error to throw
+ */
+func themeError(message as string) {
+    return Error{kind: "theme", message: $message, file: "", line: 0, col: 0};
+}
+
+/**
+ * Check a mode name.
+ *
+ * An empty name selects the default, so a deck with no `mode:` key and a
+ * caller passing no `--mode` both land here.
+ * @param name {string} "light", "dark", or "" for the default
+ * @return {string} the mode, lower-cased
+ * @throws {Error} kind "theme" for any other name
+ */
+export func mode(name as string) {
+    def want as string init strings.lower(strings.trim($name));
+    if ($want == "") {
+        return DEFAULT_MODE;
+    }
+    if (not lists.contains(modes(), $want)) {
+        throw themeError("unknown mode \"" + $name + "\"; known: " + strings.join(modes(), ", "));
+    }
+    return $want;
 }
 
 /**
@@ -589,32 +672,43 @@ export func ratios() {
 }
 
 /**
- * Look up a theme by name.
+ * Look up one palette of a theme.
  *
- * An empty name selects the default, so a deck with no `theme:` key and a
- * caller passing no `--theme` both land here.
+ * An empty name selects the default theme, and an empty mode the default
+ * mode, so a deck with no `theme:` key and a caller passing no `--theme` both
+ * land here. The names of cantrip 0.1, which put the mode into the name
+ * (`nordic-dark`, `midnight`), are refused with the spelling to use instead.
  * @param name {string} a theme name, or "" for the default
- * @return {Theme} the named theme
- * @throws {Error} kind "theme" when the name is not one of `names()`
+ * @param modeName {string} "light", "dark", or "" for the default
+ * @return {Theme} the named theme's palette for that mode
+ * @throws {Error} kind "theme" when the name or the mode is unknown
  */
-export func theme(name as string) {
+export func theme(name as string, modeName as string) {
     def want as string init strings.lower(strings.trim($name));
     if ($want == "") {
         $want = DEFAULT_THEME;
     }
+    def dark as bool init mode($modeName) == "dark";
     for (def t in all()) {
-        if ($t.name == $want) {
+        if ($t.name == $want and $t.dark == $dark) {
             return $t;
         }
     }
-    throw Error{
-        kind: "theme",
-        message: "unknown theme \"" + $name + "\"; known: " +
-            strings.join(names(), ", "),
-        file: "",
-        line: 0,
-        col: 0
-    };
+    def instead as string init "";
+    if ($want == "midnight") {
+        $instead = "plain";
+    }
+    if (strings.endsWith($want, "-dark")) {
+        def base as string init strings.substring($want, 0, len($want) - 5);
+        if (lists.contains(names(), $base)) {
+            $instead = $base;
+        }
+    }
+    if ($instead != "") {
+        throw themeError("unknown theme \"" + $name + "\"; every theme is light and dark " +
+            "now: use theme: " + $instead + " with mode: dark");
+    }
+    throw themeError("unknown theme \"" + $name + "\"; known: " + strings.join(names(), ", "));
 }
 
 /**
@@ -738,33 +832,51 @@ export func hasRatio(name as string) {
 }
 
 /**
- * The stylesheet for one theme on one stage.
+ * The stylesheet for one theme on one stage, in both its modes.
  *
  * The CSS is held as a single template with `%name%` placeholders rather than
  * built by concatenation, so it reads as a stylesheet and the substitution is
  * one pass. Percent delimiters are used because a cooked Jennifer string
  * treats braces as interpolation slots, and a stylesheet is mostly braces.
- * @param t {Theme} the palette to render
+ * The light palette is the root's; the dark one applies while the page's
+ * `<html>` carries `data-mode="dark"`, which the viewer flips with m.
+ * @param light {Theme} the theme's light palette, whose fonts and radius are used
+ * @param dark {Theme} the theme's dark palette
  * @param s {Stage} the geometry to render for
  * @return {string} a complete stylesheet, no selectors outside the deck
  */
-export func css(t as Theme, s as Stage) {
+export func css(light as Theme, dark as Theme, s as Stage) {
     def out as string init template();
-    $out = strings.replace($out, "%bg%", $t.background);
-    $out = strings.replace($out, "%fg%", $t.foreground);
-    $out = strings.replace($out, "%heading%", $t.heading);
-    $out = strings.replace($out, "%accent%", $t.accent);
-    $out = strings.replace($out, "%muted%", $t.muted);
-    $out = strings.replace($out, "%codebg%", $t.codeBg);
-    $out = strings.replace($out, "%codefg%", $t.codeFg);
-    $out = strings.replace($out, "%quotebar%", $t.quoteBar);
-    $out = strings.replace($out, "%headingfont%", $t.headingFont);
-    $out = strings.replace($out, "%bodyfont%", $t.bodyFont);
-    $out = strings.replace($out, "%monofont%", $t.monoFont);
+    $out = strings.replace($out, "%light%", palette($light));
+    $out = strings.replace($out, "%dark%", palette($dark));
+    $out = strings.replace($out, "%headingfont%", $light.headingFont);
+    $out = strings.replace($out, "%bodyfont%", $light.bodyFont);
+    $out = strings.replace($out, "%monofont%", $light.monoFont);
     $out = strings.replace($out, "%w%", convert.toString($s.width));
     $out = strings.replace($out, "%h%", convert.toString($s.height));
-    $out = strings.replace($out, "%radius%", convert.toString($t.radius));
+    $out = strings.replace($out, "%radius%", convert.toString($light.radius));
     return $out;
+}
+
+/**
+ * One palette as CSS custom properties, for a `:root` rule.
+ * @param t {Theme} the palette
+ * @return {string} the declarations, one per line
+ */
+export func palette(t as Theme) {
+    def scheme as string init "light";
+    if ($t.dark) {
+        $scheme = "dark";
+    }
+    return "    --bg: " + $t.background + ";\n" +
+        "    --fg: " + $t.foreground + ";\n" +
+        "    --heading: " + $t.heading + ";\n" +
+        "    --accent: " + $t.accent + ";\n" +
+        "    --muted: " + $t.muted + ";\n" +
+        "    --code-bg: " + $t.codeBg + ";\n" +
+        "    --code-fg: " + $t.codeFg + ";\n" +
+        "    --quote-bar: " + $t.quoteBar + ";\n" +
+        "    color-scheme: " + $scheme + ";\n";
 }
 
 /**
@@ -777,20 +889,15 @@ export func css(t as Theme, s as Stage) {
 export func template() {
     return '
 :root {
-    --bg: %bg%;
-    --fg: %fg%;
-    --heading: %heading%;
-    --accent: %accent%;
-    --muted: %muted%;
-    --code-bg: %codebg%;
-    --code-fg: %codefg%;
-    --quote-bar: %quotebar%;
-    --stage-w: %w%;
+%light%    --stage-w: %w%;
     --stage-h: %h%;
     --radius: %radius%px;
     --radius-small: calc(var(--radius) * 0.6);
     --speed: 420ms;
 }
+
+:root[data-mode="dark"] {
+%dark%}
 
 * { box-sizing: border-box; }
 
@@ -1034,14 +1141,16 @@ body > #cantrip-progress {
 }
 
 /*
- * The notes panel takes the bottom 30% of the window, and while it is open the
- * deck ends above it (the script marks the deck cantrip-notes-open and fits the
+ * The notes panel is as tall as the longest notes in the deck, at most 30% of the
+ * window, and scrolls past that. While it is open the deck ends above it (the
+ * script measures the panel, marks the deck cantrip-notes-open and fits the
  * slide into what is left), so the panel never covers the slide.
  */
 body > #cantrip-notes {
     position: fixed;
     inset: auto 0 0 0;
-    height: 30vh;
+    max-height: 30vh;
+    box-sizing: border-box;
     overflow: auto;
     padding: 18px 24px;
     background: #14161c;
@@ -1053,7 +1162,6 @@ body > #cantrip-notes {
 }
 
 body > #cantrip-notes[hidden] { display: none; }
-body > #cantrip-deck.cantrip-notes-open { bottom: 30vh; }
 body > #cantrip-notes > h2 {
     font-size: 15px;
     margin: 0 0 8px;

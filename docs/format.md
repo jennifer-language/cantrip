@@ -45,7 +45,8 @@ is front matter: one `name: value` pair per line.
 title: Cantrip
 author: mplx
 date: 2026-10-10
-theme: midnight
+theme: plain
+mode: dark
 ratio: 16:9
 subject: A worked example deck
 keywords: jennifer, slides, markdown
@@ -66,6 +67,7 @@ swallow the deck.
 | `author` | an HTML `author` meta tag, the PDF author | none |
 | `date` | an HTML `date` meta tag | none |
 | `theme` | which [theme](themes.md) to render with | `plain` |
+| `mode` | whether the HTML opens in the theme's `light` or `dark` palette; the viewer switches with <kbd>m</kbd>, and the PDF always prints light | `light` |
 | `ratio` | which [aspect ratio](themes.md#ratios) to lay out on | `16:9` |
 | `description` | the HTML `description` meta tag, what a search engine shows | the `subject` |
 | `subject` | the PDF subject, and the HTML description when there is no `description` | none |
@@ -105,8 +107,10 @@ front-matter value `1`). `notes: open` in a page built with `--no-notes` fails
 too, with "notes: open needs the notes". In the URL, which is the viewer's
 input, an unknown value is ignored and the built-in start applies.
 
-The notes panel takes the bottom 30% of the window; while it is open, the
-slide is scaled into the space above it, so the panel never covers it. On a
+The notes panel is as tall as the longest notes in the deck, at most 30% of
+the window (longer notes scroll), and keeps that height from slide to slide.
+While it is open, the slide is scaled into the space above it, so the panel
+never covers it. On a
 window narrower than 800 pixels or lower than 560 (a phone), there is no room
 for both, so the page starts with the notes closed even when the deck says
 `open`; <kbd>s</kbd> opens them, and `?notes=1` in the URL opens them at

@@ -96,16 +96,20 @@ export func defaults() {
 
 /**
  * Resolve the theme a deck should print with.
+ *
+ * Paper is white, so a PDF always prints the theme's light palette; the
+ * deck's `mode:` is still checked, so a typo there fails here too.
  * @param deck {slides.Deck} the deck being rendered
  * @param opts {Options} the caller's options
- * @return {theme.Theme} the theme to use
- * @throws {Error} kind "theme" when either name is unknown
+ * @return {theme.Theme} the theme's light palette
+ * @throws {Error} kind "theme" when the theme or the deck's mode is unknown
  */
 export func pickTheme(deck as slides.Deck, opts as Options) {
+    theme.mode(slides.metaOr($deck.meta, "mode", ""));
     if (strings.trim($opts.theme) != "") {
-        return theme.theme($opts.theme);
+        return theme.theme($opts.theme, "light");
     }
-    return theme.theme($deck.theme);
+    return theme.theme($deck.theme, "light");
 }
 
 /**

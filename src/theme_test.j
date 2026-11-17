@@ -33,7 +33,7 @@ func assertThrewKind(kind as string, threw as bool, got as string) {
  */
 func themeFailure(name as string) {
     try {
-        theme($name);
+        theme($name, "");
     } catch (e) {
         return $e.kind;
     }
@@ -87,7 +87,9 @@ func channelFailure(bare as string, at as int) {
 func testDefaults() {
     testing.assertTrue(hasTheme(DEFAULT_THEME));
     testing.assertTrue(hasRatio(DEFAULT_RATIO));
-    testing.assertEqual(theme("").name, DEFAULT_THEME);
+    testing.assertEqual(theme("", "").name, DEFAULT_THEME);
+    testing.assertEqual(mode(""), DEFAULT_MODE);
+    testing.assertFalse(theme("", "").dark);
     testing.assertEqual(stage("").name, DEFAULT_RATIO);
 }
 
@@ -103,28 +105,86 @@ func testNames() {
     testing.assertTrue(len(names()) > 0);
     testing.assertTrue(len(ratios()) > 0);
     for (def name in names()) {
-        testing.assertEqual(theme($name).name, $name);
+        testing.assertEqual(theme($name, "light").name, $name);
+        testing.assertEqual(theme($name, "dark").name, $name);
     }
     for (def name in ratios()) {
         testing.assertEqual(stage($name).name, $name);
     }
 }
 
-/** A theme name is matched case-insensitively and trimmed. */
+/** A theme name and a mode are matched case-insensitively and trimmed. */
 func testThemeLookupIsLenient() {
-    testing.assertEqual(theme("  MIDNIGHT  ").name, "midnight");
-    testing.assertEqual(theme("Solar").name, "solar");
+    testing.assertEqual(theme("  NORDIC  ", "").name, "nordic");
+    testing.assertTrue(theme("Solar", " Dark ").dark);
+    testing.assertEqual(mode(" LIGHT "), "light");
+}
+
+/** Every theme has exactly one light and one dark palette, sharing fonts and radius. */
+func testEveryThemeHasBothModes() {
+    for (def name in names()) {
+        def light as Theme init theme($name, "light");
+        def dark as Theme init theme($name, "dark");
+        testing.assertFalse($light.dark);
+        testing.assertTrue($dark.dark);
+        testing.assertEqual($dark.headingFont, $light.headingFont);
+        testing.assertEqual($dark.bodyFont, $light.bodyFont);
+        testing.assertEqual($dark.monoFont, $light.monoFont);
+        testing.assertEqual($dark.radius, $light.radius);
+    }
+    testing.assertEqual(modes(), ["light", "dark"]);
+}
+
+/** A mode other than light or dark is refused, naming the two. */
+func testModeUnknown() {
+    try {
+        mode("auto");
+        testing.assertTrue(false);
+    } catch (e) {
+        testing.assertEqual($e.kind, "theme");
+        testing.assertContains($e.message, "auto");
+        testing.assertContains($e.message, "light, dark");
+    }
+    try {
+        theme("plain", "dim");
+        testing.assertTrue(false);
+    } catch (e) {
+        testing.assertEqual($e.kind, "theme");
+    }
+}
+
+/** The names of cantrip 0.1 that carried the mode are refused with the new spelling. */
+func testOldDarkNamesAreRefusedWithAHint() {
+    try {
+        theme("nordic-dark", "");
+        testing.assertTrue(false);
+    } catch (e) {
+        testing.assertEqual($e.kind, "theme");
+        testing.assertContains($e.message, "use theme: nordic with mode: dark");
+    }
+    try {
+        theme("Midnight", "");
+        testing.assertTrue(false);
+    } catch (e) {
+        testing.assertContains($e.message, "use theme: plain with mode: dark");
+    }
+    try {
+        theme("nope-dark", "");
+        testing.assertTrue(false);
+    } catch (e) {
+        testing.assertContains($e.message, "known: plain");
+    }
 }
 
 /** An unknown theme names the ones that exist. */
 func testThemeUnknown() {
     testing.assertEqual(themeFailure("nope"), "theme");
-    testing.assertEqual(themeFailure("Midnight "), "");
+    testing.assertEqual(themeFailure("Plain "), "");
     try {
-        theme("nope");
+        theme("nope", "");
         testing.assertTrue(false);
     } catch (e) {
-        testing.assertContains($e.message, "midnight");
+        testing.assertContains($e.message, "nordic");
         testing.assertContains($e.message, "nope");
     }
 }
@@ -138,8 +198,7 @@ func testStageUnknown() {
 
 /** Every palette fills every field, and the colours are hex. */
 func testPalettesAreComplete() {
-    for (def name in names()) {
-        def t as Theme init theme($name);
+    for (def t in all()) {
         def colours as list of string init [
             $t.background,
             $t.foreground,
@@ -169,7 +228,7 @@ func testThemesDescribeThemselves() {
         testing.assertTrue($t.radius >= 0 and $t.radius <= 16);
         hexRgb($t.heading);
     }
-    testing.assertEqual(len(all()), len(names()));
+    testing.assertEqual(len(all()), 2 * len(names()));
 }
 
 /**
@@ -190,20 +249,19 @@ func testMatchesGrimoire() {
         "terminal"
     ];
     for (def name in $grimoire) {
-        testing.assertFalse(theme($name).dark);
-        testing.assertTrue(theme($name + "-dark").dark);
-        testing.assertEqual(theme($name + "-dark").printCodeBg, theme($name).printCodeBg);
+        testing.assertTrue(hasTheme($name));
+        testing.assertEqual(theme($name, "dark").printCodeBg, theme($name, "light").printCodeBg);
     }
-    testing.assertEqual(theme("nordic").accent, "#5e81ac");
-    testing.assertEqual(theme("nordic-dark").background, "#2e3440");
-    testing.assertEqual(theme("terminal").bodyFont, MONO);
-    testing.assertEqual(theme("grimoire").headingFont, SERIF);
-    testing.assertEqual(theme("grimoire").bodyFont, SANS);
+    testing.assertEqual(theme("nordic", "light").accent, "#5e81ac");
+    testing.assertEqual(theme("nordic", "dark").background, "#2e3440");
+    testing.assertEqual(theme("terminal", "light").bodyFont, MONO);
+    testing.assertEqual(theme("grimoire", "light").headingFont, SERIF);
+    testing.assertEqual(theme("grimoire", "light").bodyFont, SANS);
 }
 
 /** The heading colour and radius reach the stylesheet. */
 func testCssCarriesHeadingAndRadius() {
-    def out as string init css(theme("nordic"), stage("16:9"));
+    def out as string init css(theme("nordic", "light"), theme("nordic", "dark"), stage("16:9"));
     testing.assertContains($out, "--heading: #2e3440;");
     testing.assertContains($out, "--radius: 6px;");
     testing.assertContains($out, "color: var(--heading);");
@@ -215,8 +273,8 @@ func testCssCarriesHeadingAndRadius() {
  * theme's code colour, which is dark in a light theme.
  */
 func testOverlaysSetTheirOwnTextColour() {
-    for (def name in ["plain", "sepia", "carbon-dark"]) {
-        def out as string init css(theme($name), stage("16:9"));
+    for (def name in ["plain", "sepia", "carbon"]) {
+        def out as string init css(theme($name, "light"), theme($name, "dark"), stage("16:9"));
         def at as int init strings.indexOf($out, 'body > #cantrip-help kbd {');
         testing.assertTrue($at >= 0);
         def rule as string init strings.substring($out, $at, strings.indexOf($out, '}', $at));
@@ -227,7 +285,7 @@ func testOverlaysSetTheirOwnTextColour() {
 
 /** Every transition has its rules, and reduced motion turns them all off. */
 func testCssCoversTransitions() {
-    def out as string init css(theme("plain"), stage("16:9"));
+    def out as string init css(theme("plain", "light"), theme("plain", "dark"), stage("16:9"));
     for (def name in ["fade", "slide", "zoom"]) {
         testing.assertContains($out, "body > #cantrip-deck[data-transition=\"" + $name + "\"]");
     }
@@ -239,8 +297,7 @@ func testCssCoversTransitions() {
 
 /** A dark theme's background is darker than its text, and the reverse. */
 func testPalettePolarity() {
-    for (def name in names()) {
-        def t as Theme init theme($name);
+    for (def t in all()) {
         def bg as Rgb init hexRgb($t.background);
         def fg as Rgb init hexRgb($t.foreground);
         def bgSum as int init $bg.red + $bg.green + $bg.blue;
@@ -258,8 +315,7 @@ func testPalettePolarity() {
  * light enough to read black text on, whatever its screen polarity.
  */
 func testPrintShadesAreLight() {
-    for (def name in names()) {
-        def t as Theme init theme($name);
+    for (def t in all()) {
         def c as Rgb init hexRgb($t.printCodeBg);
         testing.assertTrue($c.red + $c.green + $c.blue > 660);
     }
@@ -267,8 +323,7 @@ func testPrintShadesAreLight() {
 
 /** A print quote rule still shows against white paper. */
 func testPrintQuoteBarShows() {
-    for (def name in names()) {
-        def t as Theme init theme($name);
+    for (def t in all()) {
         def c as Rgb init hexRgb($t.printQuoteBar);
         testing.assertTrue($c.red + $c.green + $c.blue < 660);
     }
@@ -341,10 +396,12 @@ func testHasThemeAndRatio() {
 
 /** Every placeholder the template uses is one `css` substitutes. */
 func testTemplateHasNoLeftoverPlaceholders() {
-    def out as string init css(theme("plain"), stage("16:9"));
+    def out as string init css(theme("plain", "light"), theme("plain", "dark"), stage("16:9"));
     for (def token in strings.split($out, "%")) {
         testing.assertFalse(strings.startsWith($token, "bg%"));
     }
+    testing.assertFalse(strings.contains($out, "%light%"));
+    testing.assertFalse(strings.contains($out, "%dark%"));
     testing.assertFalse(strings.contains($out, "%bg%"));
     testing.assertFalse(strings.contains($out, "%fg%"));
     testing.assertFalse(strings.contains($out, "%accent%"));
@@ -363,7 +420,7 @@ func testTemplateHasNoLeftoverPlaceholders() {
 func testEveryThemeSubstitutesFully() {
     for (def name in names()) {
         for (def ratio in ratios()) {
-            def out as string init css(theme($name), stage($ratio));
+            def out as string init css(theme($name, "light"), theme($name, "dark"), stage($ratio));
             testing.assertFalse(strings.contains($out, "%bg%"));
             testing.assertFalse(strings.contains($out, "%w%"));
             testing.assertTrue(len($out) > 1000);
@@ -371,12 +428,21 @@ func testEveryThemeSubstitutesFully() {
     }
 }
 
-/** The stylesheet carries the theme's own colours and geometry. */
+/**
+ * The stylesheet carries both of the theme's palettes, the light one at the
+ * root and the dark one under data-mode="dark", and its geometry.
+ */
 func testCssCarriesTheTheme() {
-    def t as Theme init theme("midnight");
+    def light as Theme init theme("plain", "light");
+    def t as Theme init theme("plain", "dark");
     def s as Stage init stage("4:3");
-    def out as string init css($t, $s);
-    testing.assertContains($out, $t.background);
+    def out as string init css($light, $t, $s);
+    def at as int init strings.indexOf($out, ':root[data-mode="dark"] {');
+    testing.assertTrue($at > 0);
+    testing.assertTrue(strings.indexOf($out, "--bg: " + $light.background + ";") < $at);
+    testing.assertTrue(strings.indexOf($out, "--bg: " + $t.background + ";") > $at);
+    testing.assertContains($out, "color-scheme: dark;");
+    testing.assertContains($out, "color-scheme: light;");
     testing.assertContains($out, $t.accent);
     testing.assertContains($out, $t.monoFont);
     testing.assertContains($out, "1024");
@@ -388,7 +454,7 @@ func testCssCarriesTheTheme() {
  * shrink below the stage, pinning a slide to the corner of a small window.
  */
 func testCssCentresTheStage() {
-    def out as string init css(theme("plain"), stage("16:9"));
+    def out as string init css(theme("plain", "light"), theme("plain", "dark"), stage("16:9"));
     testing.assertContains($out, "left: 50%;");
     testing.assertContains($out, "top: 50%;");
     testing.assertContains(
@@ -404,7 +470,7 @@ func testCssCentresTheStage() {
  * `{#help .slide}` or `{#cantrip-help}` from the deck matches none of them.
  */
 func testCssSelectorsAreScoped() {
-    def out as string init css(theme("plain"), stage("16:9"));
+    def out as string init css(theme("plain", "light"), theme("plain", "dark"), stage("16:9"));
     for (def line in strings.split($out, "\n")) {
         def bare as string init strings.trim($line);
         if (strings.contains($bare, "#cantrip-") or strings.contains($bare, ".cantrip-")) {
@@ -429,7 +495,7 @@ func testCssSelectorsAreScoped() {
 
 /** The stylesheet styles the structure the HTML renderer emits. */
 func testCssCoversTheMarkup() {
-    def out as string init css(theme("plain"), stage("16:9"));
+    def out as string init css(theme("plain", "light"), theme("plain", "dark"), stage("16:9"));
     def selectors as list of string init [
         'body > #cantrip-deck > .cantrip-slide {',
         "body > #cantrip-deck > .cantrip-slide.cantrip-current",
@@ -454,7 +520,17 @@ func testCssCoversTheMarkup() {
 /** The raw template still holds its placeholders. */
 func testTemplate() {
     def raw as string init template();
-    testing.assertContains($raw, "%bg%");
+    testing.assertContains($raw, "%light%");
+    testing.assertContains($raw, "%dark%");
     testing.assertContains($raw, "%w%");
     testing.assertContains($raw, "%monofont%");
+}
+
+/** A palette becomes the custom properties of one `:root` rule, with its colour scheme. */
+func testPalette() {
+    def dark as string init palette(theme("nordic", "dark"));
+    testing.assertContains($dark, "    --bg: #2e3440;\n");
+    testing.assertContains($dark, "    color-scheme: dark;\n");
+    testing.assertContains(palette(theme("nordic", "light")), "    color-scheme: light;\n");
+    testing.assertFalse(strings.contains($dark, "%"));
 }

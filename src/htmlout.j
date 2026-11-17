@@ -32,6 +32,8 @@ export def const DEFAULT_TRANSITION as string init "fade";
 /**
  * What the HTML renderer needs beyond the deck itself.
  * @field theme {string} theme name, "" for the deck's own or the default
+ * @field mode {string} the mode the page opens in, "light" or "dark"; "" for the
+ *     deck's own or the default
  * @field ratio {string} ratio name, "" for the deck's own or the default
  * @field footer {string} text shown bottom-left on every slide
  * @field notes {bool} embed speaker notes for the presenter panel
@@ -44,6 +46,7 @@ export def const DEFAULT_TRANSITION as string init "fade";
  */
 export def struct Options {
     theme as string,
+    mode as string,
     ratio as string,
     footer as string,
     notes as bool,
@@ -76,6 +79,7 @@ export def struct Start {
 export func defaults() {
     return Options{
         theme: "",
+        mode: "",
         ratio: "",
         footer: "",
         notes: true,
@@ -181,20 +185,42 @@ func startAttributes(start as Start) {
 }
 
 /**
- * Resolve the theme a deck should render with.
+ * The name of the theme a deck should render with, "" for the default.
  *
  * An explicit option wins over the deck's front matter, which wins over the
  * default, so `--theme` always overrides what the file asked for.
  * @param deck {slides.Deck} the deck being rendered
  * @param opts {Options} the caller's options
- * @return {theme.Theme} the theme to use
- * @throws {Error} kind "theme" when either name is unknown
+ * @return {string} the theme name as given
+ */
+export func themeName(deck as slides.Deck, opts as Options) {
+    if (strings.trim($opts.theme) != "") {
+        return $opts.theme;
+    }
+    return $deck.theme;
+}
+
+/**
+ * Resolve the mode the page opens in: `--mode`, else the deck's `mode:`, else
+ * light. The viewer can still switch it with m, or with `?mode=` in the URL.
+ * @param deck {slides.Deck} the deck being rendered
+ * @param opts {Options} the caller's options
+ * @return {string} "light" or "dark"
+ * @throws {Error} kind "theme" on any other value
+ */
+export func pickMode(deck as slides.Deck, opts as Options) {
+    return theme.mode(startValue($deck, $opts.mode, "mode"));
+}
+
+/**
+ * Resolve the palette the page opens with.
+ * @param deck {slides.Deck} the deck being rendered
+ * @param opts {Options} the caller's options
+ * @return {theme.Theme} the theme's palette for the opening mode
+ * @throws {Error} kind "theme" when the theme or the mode is unknown
  */
 export func pickTheme(deck as slides.Deck, opts as Options) {
-    if (strings.trim($opts.theme) != "") {
-        return theme.theme($opts.theme);
-    }
-    return theme.theme($deck.theme);
+    return theme.theme(themeName($deck, $opts), pickMode($deck, $opts));
 }
 
 /**
@@ -378,13 +404,17 @@ export func overview(deck as slides.Deck) {
 }
 
 /**
- * The document head: metadata, the title, and the theme's stylesheet.
+ * The document head: metadata, the title, and the theme's stylesheet with
+ * both of its palettes.
  * @param deck {slides.Deck} the deck being rendered, for its metadata
- * @param t {theme.Theme} the resolved theme
+ * @param name {string} the theme name, "" for the default
  * @param s {theme.Stage} the resolved stage
  * @return {string} everything from `<head>` to `</head>`
+ * @throws {Error} kind "theme" when the theme name is unknown
  */
-export func head(deck as slides.Deck, t as theme.Theme, s as theme.Stage) {
+export func head(deck as slides.Deck, name as string, s as theme.Stage) {
+    def light as theme.Theme init theme.theme($name, "light");
+    def dark as theme.Theme init theme.theme($name, "dark");
     def title as string init $deck.title;
     if (strings.trim($title) == "") {
         $title = "Slides";
@@ -411,25 +441,9 @@ export func head(deck as slides.Deck, t as theme.Theme, s as theme.Stage) {
     if ($keywords != "") {
         $out = $out + "<meta name=\"keywords\" content=\"" + attrValue($keywords) + "\">";
     }
-    $out = $out + "<meta name=\"color-scheme\" content=\"" + colorScheme($t) + "\">";
     $out = $out + "<title>" + html.escape($title) + "</title>";
-    $out = $out + "<style>" + theme.css($t, $s) + "</style></head>";
+    $out = $out + "<style>" + theme.css($light, $dark, $s) + "</style></head>";
     return $out;
-}
-
-/**
- * The `color-scheme` value matching a theme's polarity.
- *
- * Declaring it keeps the browser from painting a light scrollbar and form
- * furniture over a dark deck.
- * @param t {theme.Theme} the resolved theme
- * @return {string} "dark" or "light"
- */
-export func colorScheme(t as theme.Theme) {
-    if ($t.dark) {
-        return "dark";
-    }
-    return "light";
 }
 
 /**
@@ -444,6 +458,7 @@ export func helpPanel() {
         '<tr><td><kbd>1</kbd>..<kbd>9</kbd> <kbd>enter</kbd></td><td>jump to a slide</td></tr>' +
         '<tr><td><kbd>o</kbd></td><td>overview</td></tr>' +
         '<tr><td><kbd>s</kbd></td><td>speaker notes</td></tr>' +
+        '<tr><td><kbd>m</kbd></td><td>light / dark mode</td></tr>' +
         '<tr><td><kbd>f</kbd></td><td>fullscreen</td></tr>' +
         '<tr><td><kbd>?</kbd></td><td>this help</td></tr>' +
         '<tr><td><kbd>esc</kbd></td><td>close an overlay</td></tr>' +
@@ -460,15 +475,16 @@ export func helpPanel() {
  * @throws {Error} kind "theme" when the theme or ratio name is unknown
  */
 export func render(deck as slides.Deck, opts as Options) {
-    def t as theme.Theme init pickTheme($deck, $opts);
+    def name as string init themeName($deck, $opts);
+    def mode as string init pickMode($deck, $opts);
     def s as theme.Stage init pickStage($deck, $opts);
     def motion as string init pickTransition($deck, $opts);
     def start as Start init pickStart($deck, $opts);
     def total as int init len($deck.slides);
     def parts as list of string init [];
     $parts[] = "<!doctype html>";
-    $parts[] = "<html lang=\"" + attrValue(language($deck)) + "\">";
-    $parts[] = head($deck, $t, $s);
+    $parts[] = "<html lang=\"" + attrValue(language($deck)) + "\" data-mode=\"" + $mode + "\">";
+    $parts[] = head($deck, $name, $s);
     $parts[] = "<body><div id=\"cantrip-progress\"></div>";
     $parts[] = "<main id=\"cantrip-deck\" data-w=\"" + convert.toString($s.width) + "\" data-h=\"" +
         convert.toString($s.height) + "\" data-transition=\"" + $motion + "\"" +
@@ -541,12 +557,45 @@ export func script() {
     var roomy = window.matchMedia("(min-width: 800px) and (min-height: 560px)").matches;
     var startNotes = asked("notes", deck.dataset.notes === "open" && roomy);
     var startOverview = asked("overview", deck.dataset.overview === "open");
+    // The mode the page was built with, unless ?mode=light|dark asks for the
+    // other; m switches it. Both palettes are in the stylesheet.
+    var root = document.documentElement;
+    var askedMode = query.get("mode");
+    if (askedMode === "light" || askedMode === "dark") { root.dataset.mode = askedMode; }
+    function toggleMode() {
+        root.dataset.mode = root.dataset.mode === "dark" ? "light" : "dark";
+    }
     var startSlide = (parseInt(deck.dataset.slide, 10) || 1) - 1;
 
     function clamp(n) { return Math.max(0, Math.min(slides.length - 1, n)); }
 
-    // While the notes are open the deck ends above them (the CSS reserves the
-    // height of the panel), so the slide is scaled into the space that is left.
+    // The panel is as tall as the longest notes in the deck (the CSS caps it
+    // at 30% of the window), measured once per opening and window size, so it
+    // keeps its height from slide to slide and the slide is not rescaled on
+    // every step. While it is open the deck ends above it.
+    function notesText(i) {
+        var src = slides[i].querySelector(":scope > div.cantrip-slide-notes:last-child");
+        return src ? src.innerHTML : "<p>No notes for this slide.</p>";
+    }
+
+    function sizeNotes() {
+        if (!notes || notes.hidden) {
+            deck.style.bottom = "";
+            return;
+        }
+        notes.style.height = "";
+        var tallest = 0;
+        for (var i = 0; i < slides.length; i++) {
+            notesBody.innerHTML = notesText(i);
+            tallest = Math.max(tallest, notes.offsetHeight);
+        }
+        notesBody.innerHTML = notesText(at);
+        notes.style.height = tallest + "px";
+        deck.style.bottom = tallest + "px";
+    }
+
+    // While the notes are open the deck ends above them, so the slide is
+    // scaled into the space that is left.
     function fit() {
         var w = deck.clientWidth || window.innerWidth;
         var h = deck.clientHeight || window.innerHeight;
@@ -558,14 +607,13 @@ export func script() {
         if (!notes) { return; }
         notes.hidden = !open;
         deck.classList.toggle("cantrip-notes-open", open);
-        if (open) { showNotes(); }
+        sizeNotes();
         fit();
     }
 
     function showNotes() {
         if (!notes) { return; }
-        var src = slides[at].querySelector(":scope > div.cantrip-slide-notes:last-child");
-        notesBody.innerHTML = src ? src.innerHTML : "<p>No notes for this slide.</p>";
+        notesBody.innerHTML = notesText(at);
     }
 
     function show(n, push) {
@@ -618,6 +666,7 @@ export func script() {
         else if (k === "End") { show(slides.length - 1); e.preventDefault(); }
         else if (k === "o") { toggle(overview); }
         else if (k === "s" && notes) { setNotes(notes.hidden); }
+        else if (k === "m") { toggleMode(); }
         else if (k === "f") {
             if (document.fullscreenElement) { document.exitFullscreen(); }
             else if (document.documentElement.requestFullscreen) {
@@ -647,7 +696,7 @@ export func script() {
     });
 
     help.addEventListener("click", close);
-    window.addEventListener("resize", fit);
+    window.addEventListener("resize", function () { sizeNotes(); fit(); });
     window.addEventListener("hashchange", function () { show(fromHash(), false); });
     setNotes(startNotes && !!notes);
     show(fromHash(), false);

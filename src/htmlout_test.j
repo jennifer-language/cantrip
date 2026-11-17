@@ -17,7 +17,7 @@ use testing;
  */
 func fixture() {
     return slides.parse("---\ntitle: T & \"Q\"\nauthor: A <a@b>\ndate: 2026-01-01\n" +
-        "theme: midnight\nratio: 4:3\n---\n" +
+        "theme: plain\nmode: dark\nratio: 4:3\n---\n" +
         "# One & Only\n\nText with **bold**.\n\n<!-- notes: say this -->\n\n" +
         "---\n\n## Two\n\n- a\n- b\n");
 }
@@ -73,10 +73,14 @@ func testDefaults() {
 /** An option overrides front matter, which overrides the default. */
 func testPickTheme() {
     def opts as Options init defaults();
-    testing.assertEqual(pickTheme(fixture(), $opts).name, "midnight");
+    testing.assertEqual(pickTheme(fixture(), $opts).name, "plain");
+    testing.assertTrue(pickTheme(fixture(), $opts).dark);
     $opts.theme = "solar";
     testing.assertEqual(pickTheme(fixture(), $opts).name, "solar");
+    $opts.mode = "light";
+    testing.assertFalse(pickTheme(fixture(), $opts).dark);
     testing.assertEqual(pickTheme(slides.parse("# H"), defaults()).name, theme.DEFAULT_THEME);
+    testing.assertFalse(pickTheme(slides.parse("# H"), defaults()).dark);
 }
 
 /** The same precedence holds for the stage. */
@@ -190,13 +194,13 @@ func testOverviewEmpty() {
 /** The head carries the metadata, escaped, plus the stylesheet. */
 func testHead() {
     def deck as slides.Deck init fixture();
-    def got as string init head($deck, theme.theme("midnight"), theme.stage("4:3"));
+    def got as string init head($deck, "plain", theme.stage("4:3"));
     testing.assertContains($got, "<meta charset=\"utf-8\">");
     testing.assertContains($got, "name=\"viewport\"");
     testing.assertContains($got, "content=\"cantrip\"");
     testing.assertContains($got, "content=\"A &lt;a@b&gt;\"");
     testing.assertContains($got, "content=\"2026-01-01\"");
-    testing.assertContains($got, "content=\"dark\"");
+    testing.assertContains($got, ':root[data-mode="dark"] {');
     testing.assertContains($got, "<title>T &amp; &quot;Q&quot;</title>");
     testing.assertContains($got, "<style>");
     testing.assertContains($got, "</head>");
@@ -205,7 +209,7 @@ func testHead() {
 /** A deck with no metadata gets a usable title and no empty meta tags. */
 func testHeadWithoutMetadata() {
     def deck as slides.Deck init slides.parse("no heading at all");
-    def got as string init head($deck, theme.theme("plain"), theme.stage("16:9"));
+    def got as string init head($deck, "plain", theme.stage("16:9"));
     testing.assertContains($got, "<title>Slides</title>");
     testing.assertFalse(strings.contains($got, "name=\"author\""));
     testing.assertFalse(strings.contains($got, "name=\"date\""));
@@ -217,21 +221,36 @@ func testHeadWithoutMetadata() {
 func testHeadSearchMetadata() {
     def own as slides.Deck init slides.parse("---\ndescription: Why <this>\nsubject: S\n" +
         "keywords: a, b\n---\n# X\n");
-    def got as string init head($own, theme.theme("plain"), theme.stage("16:9"));
+    def got as string init head($own, "plain", theme.stage("16:9"));
     testing.assertContains($got, "<meta name=\"description\" content=\"Why &lt;this&gt;\">");
     testing.assertContains($got, "<meta name=\"keywords\" content=\"a, b\">");
     def fallback as slides.Deck init slides.parse("---\nsubject: From the PDF\n---\n# X\n");
     testing.assertContains(
-        head($fallback, theme.theme("plain"), theme.stage("16:9")),
+        head($fallback, "plain", theme.stage("16:9")),
         "<meta name=\"description\" content=\"From the PDF\">");
 }
 
-/** The colour scheme follows the theme's polarity. */
-func testColorScheme() {
-    testing.assertEqual(colorScheme(theme.theme("midnight")), "dark");
-    testing.assertEqual(colorScheme(theme.theme("contrast")), "dark");
-    testing.assertEqual(colorScheme(theme.theme("plain")), "light");
-    testing.assertEqual(colorScheme(theme.theme("sepia")), "light");
+/**
+ * The page opens in the mode `--mode` or the `mode:` of the deck names, else light,
+ * and the script lets the viewer switch it with m or `?mode=`.
+ */
+func testModeInPage() {
+    testing.assertContains(render(fixture(), defaults()), "<html lang=\"en\" data-mode=\"dark\">");
+    def opts as Options init defaults();
+    $opts.mode = "light";
+    testing.assertContains(render(fixture(), $opts), "data-mode=\"light\">");
+    testing.assertContains(render(slides.parse("# H"), defaults()), "data-mode=\"light\">");
+    $opts.mode = "auto";
+    def kind as string init "";
+    try {
+        render(fixture(), $opts);
+    } catch (e) {
+        $kind = $e.kind;
+    }
+    testing.assertEqual($kind, "theme");
+    def js as string init script();
+    testing.assertContains($js, "query.get(\"mode\")");
+    testing.assertContains($js, "root.dataset.mode");
 }
 
 /** The help panel documents the keys the script actually binds. */
@@ -240,7 +259,7 @@ func testHelpPanel() {
     def js as string init script();
     testing.assertContains($got, "id=\"cantrip-help\"");
     testing.assertContains($got, "hidden");
-    for (def key in ["o", "s", "f", "?"]) {
+    for (def key in ["o", "s", "m", "f", "?"]) {
         testing.assertContains($got, "<kbd>" + $key + "</kbd>");
         testing.assertContains($js, "=== \"" + $key + "\"");
     }
@@ -257,7 +276,7 @@ func testRender() {
     def got as string init render(fixture(), defaults());
     testing.assertTrue(strings.startsWith($got, "<!doctype html>"));
     testing.assertTrue(strings.endsWith($got, "</html>\n"));
-    testing.assertContains($got, "<html lang=\"en\">");
+    testing.assertContains($got, "<html lang=\"en\" data-mode=\"dark\">");
     testing.assertEqual(len(strings.split($got, "<section class=\"cantrip-slide\"")), 3);
     testing.assertEqual(len(strings.split($got, "</section>")), 3);
     testing.assertContains($got, "id=\"cantrip-progress\"");
@@ -334,7 +353,8 @@ func testRenderEveryTheme() {
         $opts.theme = $name;
         def got as string init render(fixture(), $opts);
         testing.assertFalse(strings.contains($got, "%bg%"));
-        testing.assertContains($got, theme.theme($name).background);
+        testing.assertContains($got, theme.theme($name, "light").background);
+        testing.assertContains($got, theme.theme($name, "dark").background);
     }
 }
 
@@ -564,4 +584,17 @@ func testOpenClosed() {
     testing.assertFalse(openClosed("notes", "closed"));
     testing.assertFalse(openClosed("notes", ""));
     testing.assertThrowsWith("openClosed", ["notes", "1"], "start");
+}
+
+/** `--theme` and `--mode` win over the front matter, which wins over the defaults. */
+func testThemeNameAndPickMode() {
+    def opts as Options init defaults();
+    testing.assertEqual(themeName(fixture(), $opts), "plain");
+    testing.assertEqual(pickMode(fixture(), $opts), "dark");
+    testing.assertEqual(themeName(slides.parse("# H"), $opts), "");
+    testing.assertEqual(pickMode(slides.parse("# H"), $opts), "light");
+    $opts.theme = "ivy";
+    $opts.mode = " Light ";
+    testing.assertEqual(themeName(fixture(), $opts), "ivy");
+    testing.assertEqual(pickMode(fixture(), $opts), "light");
 }

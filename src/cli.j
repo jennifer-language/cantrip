@@ -29,7 +29,7 @@ import "./htmlout.j" as htmlout;
 import "./pdfout.j" as pdfout;
 
 /** The application version, and the version `--version` reports. */
-export def const VERSION as string init "0.1.0";
+export def const VERSION as string init "0.2.0";
 
 /** The command name, as installed on PATH. */
 export def const PROGRAM as string init "cantrip";
@@ -95,6 +95,7 @@ export func parser() {
             strings.join(commands(), " | ") + ") followed by Markdown files");
     $p = args.flag($p, "out", "o", "", "output path; for build, the path without an extension");
     $p = args.flag($p, "theme", "t", "", "theme name (default: the deck's own, else plain)");
+    $p = args.flag($p, "mode", "", "", "HTML: light or dark mode at start");
     $p = args.flag($p, "ratio", "r", "", "aspect ratio: 16:9, 16:10 or 4:3");
     $p = args.flag(
         $p,
@@ -389,6 +390,7 @@ export func within(target as string, root as string) {
 export func htmlOptions(r as args.Result) {
     def out as htmlout.Options init htmlout.defaults();
     $out.theme = args.asString($r, "theme");
+    $out.mode = args.asString($r, "mode");
     $out.ratio = args.asString($r, "ratio");
     $out.footer = args.asString($r, "footer");
     $out.notes = not args.asBool($r, "no-notes");
@@ -624,13 +626,15 @@ export func report(deck as slides.Deck) {
  * @return {int} always `OK`
  */
 export func listThemes() {
-    io.printf("themes:\n");
+    io.printf("themes (each light and dark):\n");
     for (def t in theme.all()) {
+        def name as string init $t.name;
         def kind as string init "light";
         if ($t.dark) {
+            $name = "";
             $kind = "dark";
         }
-        io.printf("  %s|pad=16 %s|pad=6 %s\n", $t.name, $kind, $t.description);
+        io.printf("  %s|pad=16 %s|pad=6 %s\n", $name, $kind, $t.description);
     }
     io.printf("ratios:\n");
     for (def name in theme.ratios()) {

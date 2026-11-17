@@ -21,7 +21,7 @@ use encoding;
  */
 func fixture() {
     return slides.parse("---\ntitle: Deck T\nauthor: Ada\nsubject: S\n" +
-        "keywords: a, b\ntheme: midnight\nratio: 16:9\n---\n" +
+        "keywords: a, b\ntheme: plain\nmode: dark\nratio: 16:9\n---\n" +
         "# One\n\nText.\n\n<!-- notes: say this -->\n\n" +
         "---\n\n## Two\n\n![a pic](fig.png)\n\n" +
         "---\n\n## Three\n\n```js\nconst x = 1;\n```\n");
@@ -94,7 +94,8 @@ func testDefaults() {
 /** An option overrides front matter, which overrides the default. */
 func testPickThemeAndStage() {
     def opts as Options init defaults();
-    testing.assertEqual(pickTheme(fixture(), $opts).name, "midnight");
+    testing.assertEqual(pickTheme(fixture(), $opts).name, "plain");
+    testing.assertFalse(pickTheme(fixture(), $opts).dark);
     testing.assertEqual(pickStage(fixture(), $opts).name, "16:9");
     $opts.theme = "sepia";
     $opts.ratio = "4:3";
@@ -170,17 +171,17 @@ func testLayout() {
 }
 
 /**
- * A dark theme still prints light panels: the PDF draws black text on them,
- * so the screen's dark code shade would make code unreadable on paper.
+ * A deck in dark mode still prints its light palette: the PDF draws black text
+ * on the panels, so the dark code shade of the screen would be unreadable on paper.
  */
 func testLayoutUsesPrintShades() {
     def got as doctree.PdfOptions init layout(fixture(), defaults());
-    def t as theme.Theme init theme.theme("midnight");
+    def t as theme.Theme init theme.theme("plain", "light");
     testing.assertEqual($got.codeFill, fill($t.printCodeBg));
     testing.assertEqual($got.quoteFill, fill($t.printCodeBg));
     testing.assertEqual($got.tableHeaderFill, fill($t.printCodeBg));
     testing.assertEqual($got.quoteRule, fill($t.printQuoteBar));
-    testing.assertNotEqual($got.codeFill, fill($t.codeBg));
+    testing.assertNotEqual($got.codeFill, fill(theme.theme("plain", "dark").codeBg));
 }
 
 /** Every stage scales exactly: its printed size is a whole 3/2 of the layout. */
@@ -357,7 +358,7 @@ func testDescribe() {
     def got as string init describe(fixture(), defaults());
     testing.assertContains($got, "960x540pt");
     testing.assertContains($got, "3 page(s)");
-    testing.assertContains($got, "midnight");
+    testing.assertContains($got, "theme plain");
 }
 
 /**

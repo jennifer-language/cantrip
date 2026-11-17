@@ -41,13 +41,14 @@ Markdown, so the file still reads as a document.
 ---
 title: Cantrip
 author: mplx
-theme: grimoire-dark
+theme: grimoire
+mode: dark
 ratio: 16:9
 transition: slide
 ---
 ```
 
-A `--theme`, `--ratio`, or `--transition` on the command line overrides the
+A `--theme`, `--mode`, `--ratio`, or `--transition` on the command line overrides the
 file.
 
 ---
@@ -112,12 +113,13 @@ names, each light and dark, so a talk can wear the look of its docs:
 
 | In `grimoire.toml` | In the deck |
 | :----------------- | :---------- |
-| `theme = "grimoire"` | `theme: grimoire` or `theme: grimoire-dark` |
-| `theme = "nordic"` | `theme: nordic` or `theme: nordic-dark` |
-| `theme = "terminal"` | `theme: terminal` or `theme: terminal-dark` |
+| `theme = "grimoire"` | `theme: grimoire` |
+| `theme = "nordic"` | `theme: nordic` |
+| `theme = "terminal"` | `theme: terminal` |
 
-`cantrip themes` lists all 24. The manual this deck comes with wears
-`obsidian`, so a talk beside it would wear `obsidian` or `obsidian-dark`.
+Every theme is light and dark: `mode: dark` opens the deck dark, and
+<kbd>m</kbd> switches. `cantrip themes` lists all 13. The manual this deck
+comes with wears `obsidian`, so a talk beside it would wear `obsidian` too.
 
 <!-- notes:
 Try `cantrip build examples/sample.md --theme nordic` to show the same deck
@@ -166,6 +168,7 @@ Mention that notes never reach the audience's copy unless asked for.
 | <kbd>Left</kbd> | previous slide |
 | <kbd>o</kbd> | overview |
 | <kbd>s</kbd> | speaker notes |
+| <kbd>m</kbd> | light / dark mode |
 | <kbd>f</kbd> | fullscreen |
 | <kbd>?</kbd> | every shortcut |
 

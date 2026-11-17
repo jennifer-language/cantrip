@@ -126,7 +126,7 @@ func themeFailure(name as string) {
 
 func testThemeUnknown() {
     testing.assertEqual(themeFailure("nope"), "theme");
-    testing.assertEqual(themeFailure("midnight"), "");
+    testing.assertEqual(themeFailure("nordic"), "");
 }
 ```
 

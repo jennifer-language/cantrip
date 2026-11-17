@@ -47,6 +47,7 @@ heading at all, which is usually a separator in the wrong place.
 | ------ | ---- | ------- |
 | `-o`, `--out PATH` | where to write | beside the input |
 | `-t`, `--theme NAME` | override the deck's theme | the deck's, else `plain` |
+| `--mode light\|dark` | HTML: the mode the page opens in | the deck's `mode:`, else `light` |
 | `-r`, `--ratio NAME` | override the deck's ratio | the deck's, else `16:9` |
 | `--transition NAME` | override the deck's HTML slide transition | the deck's, else `fade` |
 | `-f`, `--footer TEXT` | text at the foot of every slide | none |
@@ -140,6 +141,7 @@ Open the file. No server is needed, and nothing is fetched.
 | digits then <kbd>Enter</kbd> | jump to a slide |
 | <kbd>o</kbd> | slide overview; click, <kbd>Enter</kbd>, or <kbd>space</kbd> to jump |
 | <kbd>s</kbd> | speaker-notes panel |
+| <kbd>m</kbd> | light / dark mode |
 | <kbd>f</kbd> | fullscreen |
 | <kbd>?</kbd> | the shortcut list |
 | <kbd>Esc</kbd> | close an overlay |
@@ -147,7 +149,8 @@ Open the file. No server is needed, and nothing is fetched.
 The current slide is in the URL fragment (`talk.html#4`), so a reload keeps your
 place and you can link to a slide. `?notes=1` / `?notes=0` and `?overview=1` /
 `?overview=0` in the URL open or close the notes panel and the overview when
-the page loads (`talk.html?notes=0#4`), whatever the deck was built with. While
+the page loads (`talk.html?notes=0#4`), and `?mode=light` / `?mode=dark` pick
+the mode, whatever the deck was built with. While
 the notes panel is open, the slide is scaled into the space above it. The slide scales to the window, so the deck
 looks the same on a laptop and a projector.
 
