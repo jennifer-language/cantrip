@@ -122,14 +122,19 @@ a [Grimoire](https://grimoire.jennifer-lang.dev/) book, built with
 
 ## Example presentations
 
-Four decks in `examples/`, built and published on every push:
+`examples/sample.md` is built and published on every push:
 
 | Deck | Theme, transition | About |
 | --- | --- | --- |
 | [Cantrip](https://jennifer-language.github.io/cantrip/sample.html) ([PDF](https://jennifer-language.github.io/cantrip/sample.pdf)) | plain, fade | the slide format, documented by being it (`examples/sample.md`) |
-| [Jennifer for the classroom](https://jennifer-language.github.io/cantrip/classroom/) ([PDF](https://jennifer-language.github.io/cantrip/classroom/index.pdf)) | carbon, slide | why Jennifer suits teaching: REPL, token and AST dumps, linter, formatter, profiler, tests, strict rules (`examples/classroom.md`) |
-| [Jennifer resources](https://jennifer-language.github.io/cantrip/resources/) ([PDF](https://jennifer-language.github.io/cantrip/resources/index.pdf)) | meridian, fade | where everything lives: the interpreter, jvc, the registry, Deckyard, the apps and the demos (`examples/resources.md`) |
-| [Advanced programming with Jennifer](https://jennifer-language.github.io/cantrip/advanced/) ([PDF](https://jennifer-language.github.io/cantrip/advanced/index.pdf)) | carbon-dark, zoom | concurrency, try / catch and error kinds, defer, profiling, copies and borrows, performance (`examples/advanced.md`) |
+
+More talks, made with cantrip, are in the
+[Jennifer Academy](https://academy.jennifer-lang.dev/), among them
+[Jennifer for the classroom](https://academy.jennifer-lang.dev/mplx/classroom/),
+[Jennifer resources](https://academy.jennifer-lang.dev/mplx/resources/) and
+[Advanced programming with Jennifer](https://academy.jennifer-lang.dev/mplx/advanced/).
+Their sources are in the academy's repository,
+[jennifer-language/academy](https://github.com/jennifer-language/academy).
 
 Press <kbd>s</kbd> in a slideshow for the speaker notes, <kbd>?</kbd> for the
 shortcuts.

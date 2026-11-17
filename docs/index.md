@@ -53,25 +53,15 @@ The published copy is built from that file on every push:
   <kbd>?</kbd> for the shortcuts, <kbd>o</kbd> for the overview
 - [the PDF](https://jennifer-language.github.io/cantrip/sample.pdf)
 
-A real talk, built the same way from `examples/classroom.md`:
-[Jennifer for the classroom](https://jennifer-language.github.io/cantrip/classroom/)
-([PDF](https://jennifer-language.github.io/cantrip/classroom/index.pdf)), on
-why Jennifer suits teaching and learning programming: a REPL, token and AST
-dumps, a linter, a profiler, tests, and strict rules that turn mistakes into
-clear messages. Press <kbd>s</kbd> for the speaker notes, which tell the story.
-
-Its follow-up, from `examples/advanced.md`:
-[Advanced programming with Jennifer](https://jennifer-language.github.io/cantrip/advanced/)
-([PDF](https://jennifer-language.github.io/cantrip/advanced/index.pdf)), on
-concurrency with `spawn`, tasks and channels, `try` / `catch` and error kinds,
-the profiler and its allocation view, when a value is copied or borrowed, and
-performance tuning, with figures measured on Jennifer 0.26.0.
-
-And a map of the ecosystem, from `examples/resources.md`:
-[Jennifer resources](https://jennifer-language.github.io/cantrip/resources/)
-([PDF](https://jennifer-language.github.io/cantrip/resources/index.pdf)): the
-interpreter, jvc, the deck registry, the curated Deckyard decks, the apps and
-the demos.
+More talks, made with cantrip, are in the
+[Jennifer Academy](https://academy.jennifer-lang.dev/): for example
+[Jennifer for the classroom](https://academy.jennifer-lang.dev/mplx/classroom/),
+on why Jennifer suits teaching and learning programming,
+[Advanced programming with Jennifer](https://academy.jennifer-lang.dev/mplx/advanced/),
+on concurrency, errors, profiling and performance, and
+[Jennifer resources](https://academy.jennifer-lang.dev/mplx/resources/), a map
+of the ecosystem. Each comes as a slideshow and a PDF; press <kbd>s</kbd> in a
+slideshow for the speaker notes, which tell the story.
 
 ## Where to go next
 

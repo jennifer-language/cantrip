@@ -17,12 +17,10 @@ permissions:
 env:
   # The interpreter CI runs against: a release (X.Y.Z, installed from its
   # checksummed .deb) or a commit of Jennifer's main branch (built with Go).
-  # cantrip calls library functions first released in 0.26.0 - the floor in
-  # deck.toml - so until 0.26.0 is published CI pins the main-branch commit the
-  # project was last verified against. Switch this to "0.26.0" once it ships;
-  # bumping it is how the project moves to a newer language. Not named
-  # JENNIFER: scripts/check.sh reads that as the path of the interpreter to run.
-  JENNIFER_REF: "9486c82f34e666796dbbf80e443bd3b31f7d1149"
+  # It is the floor in deck.toml, 0.26.0; bumping it is how the project moves
+  # to a newer language. Not named JENNIFER: scripts/check.sh reads that as the
+  # path of the interpreter to run.
+  JENNIFER_REF: "0.26.0"
 
 jobs:
   check:
@@ -153,17 +151,34 @@ jobs:
           git clone --depth 1 https://github.com/jennifer-language/grimoire.git /tmp/grimoire
           /tmp/grimoire/bin/grimoire build --config grimoire.toml --pdf
           ./bin/cantrip build examples/sample.md --out docs-site/sample
-          # A talk published in its own directory, /cantrip/classroom/.
-          mkdir -p docs-site/classroom
-          ./bin/cantrip build examples/classroom.md --out docs-site/classroom/index
-          mkdir -p docs-site/advanced
-          ./bin/cantrip build examples/advanced.md --out docs-site/advanced/index
-          mkdir -p docs-site/resources
-          ./bin/cantrip build examples/resources.md --out docs-site/resources/index
-          # The HTML keeps an image's path as written, so the logo sits beside
-          # each deck that shows it.
+
+      # The teaching talks moved to the academy. Their old addresses,
+      # /cantrip/<talk>/, keep working as redirect pages; Pages cannot send a
+      # real redirect. The old PDF addresses get a copy of the academy's PDF
+      # as it is at deploy time, when it can be fetched.
+      - name: Redirect the talks that moved to the academy
+        run: |
+          set -eu
           for d in classroom advanced resources; do
-            cp examples/jennifer-logo.png docs-site/$d/
+            url="https://academy.jennifer-lang.dev/mplx/$d/"
+            mkdir -p "docs-site/$d"
+            cat > "docs-site/$d/index.html" <<EOF
+          <!doctype html>
+          <html lang="en">
+          <head>
+          <meta charset="utf-8">
+          <title>Moved to the Jennifer Academy</title>
+          <link rel="canonical" href="$url">
+          <meta http-equiv="refresh" content="0; url=$url">
+          <meta name="robots" content="noindex">
+          </head>
+          <body>
+          <p>This talk moved to the Jennifer Academy: <a href="$url">$url</a></p>
+          </body>
+          </html>
+          EOF
+            curl -fsSL --retry 2 -o "docs-site/$d/index.pdf" "$url$d.pdf" ||
+              echo "::warning::could not fetch $url$d.pdf; /cantrip/$d/index.pdf stays unpublished"
           done
 
       - uses: actions/configure-pages@v5
