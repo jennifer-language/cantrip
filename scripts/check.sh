@@ -3,7 +3,8 @@
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 #
 # The whole gate, in the order a failure is cheapest to read: formatting,
-# then lint, then docs, then tests, then a real build of the example deck.
+# then lint, then docs, then tests, then a real build of the example deck,
+# then the slideshow's start options in headless Chromium (skipped without one).
 # This is what CI runs, so a green run here is a green run there.
 #
 # Set JENNIFER=/path/to/jennifer to test against a specific interpreter.
@@ -103,6 +104,9 @@ grep -q '^<!doctype html>' "$out/sample.html" || {
     echo "  sample.html is not an HTML document"
     status=1
 }
+
+step "start options in a browser"
+JENNIFER="$JENNIFER" ./scripts/browser-check.sh || status=1
 
 if [ "$status" -eq 0 ]; then
     printf '\n==> all checks passed\n'
