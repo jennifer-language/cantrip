@@ -49,9 +49,9 @@ slide format, the themes, the slideshow, and the page geometry.
 `examples/sample.md` is a worked deck that documents the format by being it.
 The published copy is built from that file on every push:
 
-- [the slideshow](https://jennifer-language.github.io/cantrip/sample.html) - press
+- [the slideshow](https://cantrip.jennifer-lang.dev/sample.html) - press
   <kbd>?</kbd> for the shortcuts, <kbd>o</kbd> for the overview
-- [the PDF](https://jennifer-language.github.io/cantrip/sample.pdf)
+- [the PDF](https://cantrip.jennifer-lang.dev/sample.pdf)
 
 More talks, made with cantrip, are in the
 [Jennifer Academy](https://academy.jennifer-lang.dev/): for example

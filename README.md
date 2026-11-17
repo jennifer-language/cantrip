@@ -29,7 +29,8 @@ diffs like prose.
 ---
 title: Cantrip
 author: mplx
-theme: midnight
+theme: plain
+mode: dark
 ratio: 16:9
 ---
 
@@ -99,15 +100,17 @@ cantrip info talk.md                                  # what is in there
 ```
 
 `cantrip --help` lists every flag, and `cantrip themes` every theme. There are
-24 of them: Cantrip's own `plain`, `midnight`, `solar`, and `contrast`, plus all
-ten [Grimoire](https://grimoire.jennifer-lang.dev/) themes under their own names,
-each light and `-dark` - so a talk can match the manual beside it. Three ratios
+13 of them, each with a light and a dark palette: Cantrip's own `plain`,
+`solar`, and `contrast`, plus all ten [Grimoire](https://grimoire.jennifer-lang.dev/)
+themes under their own names, so a talk can match the manual beside it. The
+deck sets the mode it opens in (`mode: light` or `mode: dark`); whoever watches
+switches it with <kbd>m</kbd>. Three ratios
 (`16:9`, `16:10`, `4:3`), and four slide transitions (`fade`, `slide`, `zoom`,
 `none`).
 
 ## Documentation
 
-Published at **<https://jennifer-language.github.io/cantrip/>**. The pages in `docs/` are
+Published at **<https://cantrip.jennifer-lang.dev/>**. The pages in `docs/` are
 a [Grimoire](https://grimoire.jennifer-lang.dev/) book, built with
 `grimoire build --config grimoire.toml`.
 
@@ -126,7 +129,7 @@ a [Grimoire](https://grimoire.jennifer-lang.dev/) book, built with
 
 | Deck | Theme, transition | About |
 | --- | --- | --- |
-| [Cantrip](https://jennifer-language.github.io/cantrip/sample.html) ([PDF](https://jennifer-language.github.io/cantrip/sample.pdf)) | plain, fade | the slide format, documented by being it (`examples/sample.md`) |
+| [Cantrip](https://cantrip.jennifer-lang.dev/sample.html) ([PDF](https://cantrip.jennifer-lang.dev/sample.pdf)) | plain, fade | the slide format, documented by being it (`examples/sample.md`) |
 
 More talks, made with cantrip, are in the
 [Jennifer Academy](https://academy.jennifer-lang.dev/), among them

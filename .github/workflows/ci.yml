@@ -152,6 +152,12 @@ jobs:
           /tmp/grimoire/bin/grimoire build --config grimoire.toml --pdf
           ./bin/cantrip build examples/sample.md --out docs-site/sample
 
+      # A Pages deployment publishes exactly what the artifact holds, so a
+      # build that dropped docs/CNAME would quietly unbind
+      # cantrip.jennifer-lang.dev and leave the site on github.io.
+      - name: The site keeps its domain
+        run: grep -qx 'cantrip.jennifer-lang.dev' docs-site/CNAME
+
       # The teaching talks moved to the academy. Their old addresses,
       # /cantrip/<talk>/, keep working as redirect pages; Pages cannot send a
       # real redirect. The old PDF addresses get a copy of the academy's PDF
