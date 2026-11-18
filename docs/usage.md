@@ -155,7 +155,10 @@ A bar of four buttons in the top-right corner stands in for the other keys:
 the overview, the speaker notes (left out when the page has none), light /
 dark mode, and fullscreen (left out where the browser has none, as on an
 iPhone). It appears only on a device whose main pointer is a finger, so a
-laptop, even one with a touch screen, shows the plain slide.
+laptop, even one with a touch screen, shows the plain slide. The bar shows
+when the page opens and fades out after three seconds, so it does not cover
+the slide; tap the middle third of the screen to bring it back or hide it.
+While the overview is open, the bar stays.
 
 The current slide is in the URL fragment (`talk.html#4`), so a reload keeps your
 place and you can link to a slide. `?notes=1` / `?notes=0` and `?overview=1` /

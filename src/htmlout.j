@@ -732,10 +732,27 @@ export func script() {
         show(parseInt(hit.dataset.go, 10) - 1);
     });
 
+    // The touch bar shows for a moment when the page opens and after each
+    // press of one of its buttons, then fades out so it does not cover the
+    // slide; a tap on the middle third of the window shows or hides it. It
+    // stays while the overview is open, since its button closes the overview.
+    var barTimer = 0;
+    function showBar(on) {
+        if (!bar) { return; }
+        window.clearTimeout(barTimer);
+        bar.classList.toggle("cantrip-shown", on);
+        if (on) { barTimer = window.setTimeout(fadeBar, 3000); }
+    }
+    function fadeBar() {
+        if (!overview.hidden) { showBar(true); return; }
+        showBar(false);
+    }
+
     // Touch, for a phone or tablet with no keyboard: a swipe left or right
     // turns the slide, and a tap on the right or left third of the window goes
-    // forward or back. Touch events rather than pointer events, because the
-    // browser cancels a pointer once it treats the gesture as a pan. A swipe
+    // forward or back, and one on the middle third shows or hides the bar.
+    // Touch events rather than pointer events, because the browser cancels a
+    // pointer once it treats the gesture as a pan. A swipe
     // that starts in a code block that scrolls sideways scrolls it instead, a
     // tap on a link follows the link, and a gesture with two fingers (a pinch)
     // turns nothing. Mouse clicks are left alone, so text stays selectable.
@@ -769,6 +786,7 @@ export func script() {
         var x = t.clientX - box.left;
         if (x > box.width * 2 / 3) { show(at + 1); e.preventDefault(); }
         else if (x < box.width / 3) { show(at - 1); e.preventDefault(); }
+        else if (bar) { showBar(!bar.classList.contains("cantrip-shown")); e.preventDefault(); }
     });
 
     // The touch bar does what the keys do. A browser without fullscreen (the
@@ -780,6 +798,7 @@ export func script() {
             var b = e.target.closest("button[data-act]");
             if (!b) { return; }
             var act = b.dataset.act;
+            showBar(true);
             if (act === "overview") { toggle(overview); }
             else if (act === "notes" && notes) { close(); setNotes(notes.hidden); }
             else if (act === "mode") { toggleMode(); }
@@ -793,6 +812,7 @@ export func script() {
     setNotes(startNotes && !!notes);
     show(fromHash(), false);
     if (startOverview) { overview.hidden = false; }
+    showBar(true);
     // Transitions start after the first frame, so the deck opens on its slide.
     window.requestAnimationFrame(function () {
         window.requestAnimationFrame(function () { deck.classList.add("cantrip-ready"); });

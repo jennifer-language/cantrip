@@ -11,7 +11,8 @@
 # mode: ?mode= and the m key, which must repaint the slide; and touch: a swipe
 # or a tap on the right or left third turns the slide, a pinch does not; and
 # the touch bar, shown only for a coarse pointer that cannot hover, whose
-# buttons open and close the overview and the notes and switch the mode.
+# buttons open and close the overview and the notes and switch the mode, and
+# which fades out after a few seconds and comes back with a tap in the middle.
 #
 # Skips (exit 0) when no Chromium is installed. Set JENNIFER and CHROMIUM to
 # pick the interpreter and the browser.
@@ -166,15 +167,31 @@ awk -v probe="$work/touch.js" '
     { print }
 ' "$work/deck.html" > "$work/touch.html"
 
-# The bar probe: "<bar> <overview> <overview again> <notes> <mode>", each
-# after one press of the button for it.
+# The bar probe: "<bar> <overview> <overview again> <notes> <mode> <bar after
+# a middle tap> <after another> <after 3.5 s>". The bar is "hidden" when the
+# stylesheet leaves it out, else "shown" or "faded".
 barprobe='<script>
 window.addEventListener("load", function () {
     var b = document.querySelector("body > #cantrip-touchbar");
     var ov = document.querySelector("body > #cantrip-overview");
     var n = document.querySelector("body > #cantrip-notes");
+    var d = document.querySelector("body > #cantrip-deck");
     function press(act) { b.querySelector("[data-act=" + act + "]").click(); }
-    var r = [getComputedStyle(b).display === "none" ? "hidden" : "shown"];
+    function state() {
+        if (getComputedStyle(b).display === "none") { return "hidden"; }
+        return b.classList.contains("cantrip-shown") ? "shown" : "faded";
+    }
+    function tapMiddle() {
+        var t = new Touch({ identifier: 1, target: d, clientX: window.innerWidth / 2,
+            clientY: window.innerHeight / 2 });
+        var o = { bubbles: true, cancelable: true };
+        o.touches = [t]; o.changedTouches = [t];
+        d.dispatchEvent(new TouchEvent("touchstart", o));
+        o.touches = [];
+        d.dispatchEvent(new TouchEvent("touchend", o));
+        return state();
+    }
+    var r = [state()];
     press("overview");
     r.push(ov.hidden ? "closed" : "open");
     press("overview");
@@ -183,10 +200,15 @@ window.addEventListener("load", function () {
     r.push(n.hidden ? "closed" : "open");
     press("mode");
     r.push(document.documentElement.dataset.mode);
-    var o = document.createElement("output");
-    o.id = "probe";
-    o.textContent = r.join(" ");
-    document.body.appendChild(o);
+    r.push(tapMiddle());
+    r.push(tapMiddle());
+    window.setTimeout(function () {
+        r.push(state());
+        var o = document.createElement("output");
+        o.id = "probe";
+        o.textContent = r.join(" ");
+        document.body.appendChild(o);
+    }, 3500);
 });
 </script>'
 printf '%s\n' "$barprobe" > "$work/bar.js"
@@ -204,7 +226,7 @@ check() {
     # A fifth argument passes extra browser flags, such as a phone's pointer.
     extra="${5:-}"
     got="$("$browser" --headless=new --no-sandbox --disable-gpu --user-data-dir="$work/profile" $extra \
-        --window-size="$size" --virtual-time-budget=3000 --dump-dom "$url" 2>/dev/null |
+        --window-size="$size" --virtual-time-budget=6000 --dump-dom "$url" 2>/dev/null |
         sed -n 's#.*<output id="probe">\([^<]*\)</output>.*#\1#p')"
     if [ "$got" = "$want" ]; then
         echo "  ok   $label: $got"
@@ -231,7 +253,7 @@ check "swipes and taps turn the slide, a pinch does not" 390,844 \
 # primaryPointerType=2 is coarse, primaryHoverType=1 is none: a phone.
 phone="--blink-settings=primaryPointerType=2,primaryHoverType=1"
 check "the touch bar works on a phone" 390,844 "file://$work/bar.html?notes=0" \
-    "shown open closed open dark" "$phone"
+    "shown open closed open dark faded shown faded" "$phone"
 check "no touch bar with a mouse" 1280,800 "file://$work/bar.html?notes=0" \
-    "hidden open closed open dark"
+    "hidden open closed open dark hidden hidden hidden"
 exit "$status"

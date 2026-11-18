@@ -901,10 +901,16 @@ export func template() {
 
 * { box-sizing: border-box; }
 
+/*
+ * overscroll-behavior: a swipe turns the slide, so the browser must not also
+ * take a sideways swipe as its back or forward gesture (Chrome on Android
+ * does, on a page that cannot scroll sideways) or pull the page to reload it.
+ */
 html, body {
     margin: 0;
     padding: 0;
     height: 100%;
+    overscroll-behavior: none;
     background: #0b0b0d;
     color: var(--fg);
     font-family: %bodyfont%;
@@ -1209,7 +1215,8 @@ body > #cantrip-help kbd {
  * pointer is coarse and cannot hover (a phone or tablet), so a laptop with a
  * touch screen keeps the plain slide. It sits above the notes and the overview,
  * so its buttons also close what they opened, and is always dark, like the
- * help overlay.
+ * help overlay. The script adds cantrip-shown for a few seconds at a time; without
+ * it the bar is transparent and lets taps through to the slide.
  */
 body > #cantrip-touchbar { display: none; }
 @media (hover: none) and (pointer: coarse) {
@@ -1223,7 +1230,11 @@ body > #cantrip-touchbar { display: none; }
         background: rgba(20, 22, 28, 0.72);
         border-radius: 10px;
         z-index: 16;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 300ms ease;
     }
+    body > #cantrip-touchbar.cantrip-shown { opacity: 1; pointer-events: auto; }
 }
 body > #cantrip-touchbar > button {
     width: 40px;

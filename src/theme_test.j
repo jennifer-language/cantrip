@@ -295,6 +295,17 @@ func testCssCoversTransitions() {
         "body > #cantrip-deck.cantrip-ready:not([data-transition=\"none\"]) > .cantrip-slide");
 }
 
+/**
+ * A swipe turns the slide, so the page turns off the browser's own swipe
+ * gestures, and the touch bar is out of sight until the script shows it.
+ */
+func testCssKeepsSwipesForTheSlides() {
+    def out as string init css(theme("plain", "light"), theme("plain", "dark"), stage("16:9"));
+    testing.assertContains($out, "overscroll-behavior: none;");
+    testing.assertContains($out, "@media (hover: none) and (pointer: coarse)");
+    testing.assertContains($out, 'body > #cantrip-touchbar.cantrip-shown { opacity: 1;');
+}
+
 /** A dark theme's background is darker than its text, and the reverse. */
 func testPalettePolarity() {
     for (def t in all()) {
