@@ -154,10 +154,10 @@ and pinching zooms without turning the slide.
 A bar of four buttons in the top-right corner stands in for the other keys:
 the overview, the speaker notes (left out when the page has none), light /
 dark mode, and fullscreen (left out where the browser has none, as on an
-iPhone). It appears only on a device whose main pointer is a finger, so a
-laptop, even one with a touch screen, shows the plain slide. The bar shows
-when the page opens and fades out after three seconds, so it does not cover
-the slide; tap the middle third of the screen to bring it back or hide it.
+iPhone). On any device with a touch screen, a laptop with one included, it
+shows when the page opens and fades out after three seconds, so it does not
+cover the slide; tap the middle third of the screen to bring it back or hide
+it. With only a mouse it never appears.
 While the overview is open, the bar stays.
 
 The current slide is in the URL fragment (`talk.html#4`), so a reload keeps your

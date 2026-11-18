@@ -290,8 +290,15 @@ check "swipes and taps turn the slide, a pinch does not" 390,844 \
 phone="--blink-settings=primaryPointerType=2,primaryHoverType=1"
 check "the touch bar works on a phone" 390,844 "file://$work/bar.html?notes=0" \
     "shown open closed open dark faded shown faded" "$phone"
-check "no touch bar with a mouse" 1280,800 "file://$work/bar.html?notes=0" \
-    "hidden open closed open dark hidden hidden hidden"
+# A ChromeOS tablet: the main pointer is a touchpad (fine, 4; hover, 2), but
+# a finger (coarse, 2) is among the pointers, so the bar shows at the start.
+tablet="--blink-settings=primaryPointerType=4,primaryHoverType=2,availablePointerTypes=6,availableHoverTypes=3"
+check "a touch screen beside a touchpad shows the bar" 1280,800 \
+    "file://$work/bar.html?notes=0" "shown open closed open dark faded shown faded" "$tablet"
+# With a mouse alone the bar stays out until a touch, which a tap on the
+# middle is, and that tap shows it.
+check "with a mouse the bar waits for a touch" 1280,800 "file://$work/bar.html?notes=0" \
+    "hidden open closed open dark shown faded faded"
 # history.length is above 1 in a headless tab that loaded the page, so back.
 check "Esc closes an overlay, then goes back only with a referrer" 1280,800 \
     "file://$work/esc.html?notes=0" "closed stayed stayed closed stayed back"
