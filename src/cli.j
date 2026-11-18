@@ -29,7 +29,7 @@ import "./htmlout.j" as htmlout;
 import "./pdfout.j" as pdfout;
 
 /** The application version, and the version `--version` reports. */
-export def const VERSION as string init "0.3.3";
+export def const VERSION as string init "0.4.0";
 
 /** The command name, as installed on PATH. */
 export def const PROGRAM as string init "cantrip";

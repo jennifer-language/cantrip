@@ -29,7 +29,7 @@ jvc app install https://github.com/jennifer-language/cantrip
 ```
 
 ```text
-installed cantrip 0.3.3
+installed cantrip 0.4.0
   from:    https://github.com/jennifer-language/cantrip
   app:     ~/.local/share/jvc/apps/cantrip
   command: ~/.local/bin/cantrip
