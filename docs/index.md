@@ -53,7 +53,7 @@ The published copy is built from that file on every push:
   <kbd>?</kbd> for the shortcuts, <kbd>o</kbd> for the overview
 - [the PDF](https://cantrip.jennifer-lang.dev/sample.pdf)
 
-More talks, made with cantrip, are in the
+More talks, made with Cantrip, are in the
 [Jennifer Academy](https://academy.jennifer-lang.dev/): for example
 [Jennifer for the classroom](https://academy.jennifer-lang.dev/mplx/classroom/),
 on why Jennifer suits teaching and learning programming,

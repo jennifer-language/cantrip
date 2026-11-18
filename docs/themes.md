@@ -74,7 +74,7 @@ The rest are the ten themes of [Grimoire](https://grimoire.jennifer-lang.dev/),
 the Jennifer book builder, with the same names and the same colours - so a
 talk can wear the look of the manual it sits beside. A Grimoire theme has a
 light and a dark palette and picks between them with its `mode`, and so does a
-cantrip theme.
+Cantrip theme.
 
 | Theme | Fonts | Looks like |
 | ----- | ----- | ---------- |

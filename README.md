@@ -131,7 +131,7 @@ a [Grimoire](https://grimoire.jennifer-lang.dev/) book, built with
 | --- | --- | --- |
 | [Cantrip](https://cantrip.jennifer-lang.dev/sample.html) ([PDF](https://cantrip.jennifer-lang.dev/sample.pdf)) | plain, fade | the slide format, documented by being it (`examples/sample.md`) |
 
-More talks, made with cantrip, are in the
+More talks, made with Cantrip, are in the
 [Jennifer Academy](https://academy.jennifer-lang.dev/), among them
 [Jennifer for the classroom](https://academy.jennifer-lang.dev/mplx/classroom/),
 [Jennifer resources](https://academy.jennifer-lang.dev/mplx/resources/) and
