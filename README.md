@@ -57,6 +57,13 @@ with no connection. Keyboard and touch navigation, a slide overview, a presenter
 panel, a progress bar, slide transitions, the current slide in the URL fragment, and a print
 stylesheet so the browser's own print dialog produces slides.
 
+**Code is highlighted** when the deck is built, in the slideshow and in the
+PDF alike: Jennifer, PHP, shell, Go, Python, JavaScript and TypeScript, JSON,
+TOML, YAML, SQL, HTML and XML, Dockerfiles and C. No highlighter is loaded at
+view time, and every theme's token colours keep the WCAG AA contrast on its
+code background in both modes. `highlight: false` in the front matter turns it
+off.
+
 **The PDF** is one page per slide at the deck's own aspect ratio, so a viewer
 shows it full-bleed rather than re-fitting a portrait document. It carries the
 deck's metadata, a bookmark outline from the headings, and a running footer.

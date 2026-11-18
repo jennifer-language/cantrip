@@ -77,6 +77,7 @@ swallow the deck.
 | `notes` | whether the HTML's speaker-notes panel is `open` or `closed` when the page opens | `closed` |
 | `slide` | the slide the HTML opens on, from 1 | `1` |
 | `overview` | whether the HTML opens in the slide overview, `open` or `closed` | `closed` |
+| `highlight` | whether [code blocks are highlighted](#code-is-highlighted-when-the-deck-is-built), `true` or `false`; anything else fails the build | `true` |
 
 Values may be quoted or bare: `title: "A Deck"` and `title: A Deck` agree. A
 value keeps its internal colons, so `ratio: 16:9` reads correctly. Keys are
@@ -198,7 +199,10 @@ text (Windows-1252). Any other character, such as Greek, Cyrillic, CJK, or an
 emoji, prints as `?` on the page, in the running footer too; the PDF's
 metadata and bookmarks keep it as written. The HTML shows every character.
 
-### A fenced block's language survives
+### Code is highlighted when the deck is built
+
+A fenced block whose language Cantrip knows is coloured as the deck is built,
+in the slideshow and in the PDF alike:
 
 ```markdown
     ```jennifer
@@ -206,9 +210,40 @@ metadata and bookmarks keep it as written. The HTML shows every character.
     ```
 ```
 
-becomes `<pre><code class="language-jennifer">`, so a syntax highlighter you add
-yourself has something to match on. `cantrip` ships no highlighter and loads
-nothing from a CDN.
+| Language | Fence tags |
+| -------- | ---------- |
+| Jennifer | `jennifer`, `j` |
+| PHP | `php` |
+| Shell | `sh`, `bash`, `shell`, `zsh` |
+| A terminal session | `console`, `shell-session`: `$ ` and `% ` prompts, output left plain |
+| Go | `go`, `golang` |
+| Python | `python`, `py`, `python3` |
+| JavaScript, TypeScript | `js`, `javascript`, `jsx`, `mjs`, `ts`, `typescript`, `tsx` |
+| JSON | `json`, `jsonc` |
+| TOML | `toml` |
+| YAML | `yaml`, `yml` |
+| SQL | `sql`, `sqlite`, `postgresql`, `mysql` |
+| HTML, XML | `html`, `xml`, `xhtml`, `svg` |
+| Dockerfile | `dockerfile`, `docker` |
+| C | `c`, `h` |
+
+Tags match in any case. A block with no tag, or one not in the table, stays in
+the plain code colour, as before. Jennifer is highlighted exactly as
+[Grimoire](https://grimoire.jennifer-lang.dev/) highlights it. The other
+languages are small rule tables: keywords, types, literals, comments, strings,
+numbers, and variables such as `$x`; enough to colour a slide, not a parser.
+
+Nothing is loaded at view time: the HTML carries the colours as
+`<span class="hljs-keyword">` and the like (highlight.js's class names) inside
+`<pre><code class="language-jennifer">`, styled by the theme's stylesheet. The
+code stays escaped, so a block showing `</code>` or `<script>` is text. The
+PDF draws each token in the theme's print colour, comments in the oblique
+face. The token colours are listed in [Themes](themes.md#token-colours).
+
+`highlight: false` in the front matter turns it off for the whole deck. The
+value is checked like the other keys: `true` or `false`, in any case, and
+anything else fails the build. The slideshow's notes panel keeps its code
+plain; notes printed with `--notes` are highlighted like the slides.
 
 ## Images
 

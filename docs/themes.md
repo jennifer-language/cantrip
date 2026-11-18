@@ -98,6 +98,26 @@ accent.
 Fonts are system stacks - no web font is fetched, so a deck renders identically
 offline.
 
+## Token colours
+
+[Highlighted code](format.md#code-is-highlighted-when-the-deck-is-built) takes
+its colours from the theme, one set for each palette and one for print:
+
+- the Grimoire themes and `plain` start from Grimoire's own token colours, Atom
+  One Light on a light palette and Atom One Dark on a dark one;
+- `solar` uses the Solarized accents, which that palette shares between its two
+  modes;
+- `contrast` uses saturated colours picked for a poor projector.
+
+Every colour is then checked against the code background it is drawn on, on
+screen in both modes and in the PDF on the print shade. One that does not
+reach a contrast ratio of 4.5:1 (WCAG AA for normal text; 7:1, AAA, for
+`contrast`) is darkened on a light background, or lightened on a dark one, in
+steps of 5% until it does. Most dark palettes keep the Atom One colours as
+they are; most light ones darken the comment, string and built-in colours a
+little. `src/theme_test.j` holds every theme to this, so a new theme cannot
+ship an unreadable token.
+
 ## Ratios
 
 A ratio fixes two things: the slideshow's stage in CSS pixels, and the PDF's
@@ -121,14 +141,15 @@ deliberate.
 **The page stays white.** The PDF always prints the theme's light palette,
 whatever mode the slideshow opens in, as Grimoire's own PDF does: the PDF is
 the artifact that gets printed, and a black page costs a cartridge and reads
-worse on paper. Text in the PDF is black throughout.
+worse on paper. Text in the PDF is black, except highlighted code.
 
 **The shades are print shades.** Every palette carries a light shade for print,
 used behind code, callouts, quotes, and table headers, and a quote rule that
 shows on white; for most light palettes it is the screen colour itself.
 
 **Headings print black.** The interpreter's PDF renderer draws all text in one
-colour, so the theme's accent stays on screen. Headings keep their size, though:
+colour, so the theme's accent stays on screen. Highlighted code is the
+exception: Cantrip colours it itself, in the light palette's token colours. Headings keep their size, though:
 each slide is laid out at two thirds of its page and scaled up, so a heading
 stands above the body text exactly as the renderer designed it.
 
@@ -140,6 +161,7 @@ light, legible handout from one source, which is usually what you want.
 | Background | the theme's, in the current mode | white |
 | Headings | the theme's accent | black |
 | Code panels | the theme's shade | the theme's print shade |
+| Code tokens | the palette's token colours | the light palette's, legible on the print shade |
 | Speaker notes | embedded, hidden, <kbd>s</kbd> to show | omitted unless `--notes` |
 | Slide numbers | bottom right | in the running footer |
 | Footer text | bottom left | footer left, else the deck's title |
@@ -171,8 +193,9 @@ light and a dark palette under the same name, and the tests in
 `src/theme_test.j` will hold the new entry to the same contract as the others.
 They check that every name has both palettes with the same fonts and radius,
 that every field is filled, that every colour parses as hex, that a dark
-palette really is light-on-dark, that the print shade is light enough for black text, and that
-the print quote rule shows on white - so a theme
+palette really is light-on-dark, that the print shade is light enough for black text,
+the print quote rule shows on white, and every token colour is legible on its
+code background - so a theme
 that passes is a theme that works in both outputs.
 
 The stylesheet itself is one template in `theme.j` with `%name%` placeholders

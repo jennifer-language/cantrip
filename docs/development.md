@@ -7,7 +7,8 @@ cantrip/
 ├── bin/cantrip           the launcher (shebang; `bin` in deck.toml)
 ├── src/                  every module, with a co-located *_test.j overlay
 │   ├── slides.j            the input format: Markdown in, a Deck out
-│   ├── theme.j             palettes, stage geometry, the stylesheet
+│   ├── theme.j             palettes, token colours, stage geometry, the stylesheet
+│   ├── highlight.j         code blocks -> highlighted tokens, table-driven
 │   ├── htmlout.j           Deck -> one self-contained HTML slideshow
 │   ├── pdfout.j            Deck -> a paginated PDF
 │   └── cli.j               arguments, files, dispatch, exit codes
@@ -45,6 +46,27 @@ string and asserts on the output, with no temporary files involved. The
 `pdfout` module takes its images as pre-loaded bytes for the same reason, and
 exposes `imageUrls` so `cli.j` knows what to load - the same split the
 interpreter's own `markdown` module makes.
+
+### Highlighting
+
+`highlight.j` turns a code block into tokens with one table-driven lexer: a
+`Lang` entry per language lists its words, comment and string markers, and
+the few shapes it has (a `$variable`, a `key:`, a `[section]`, a tag). Its
+Jennifer rules are Grimoire's, which port the project's highlight.js
+definition. Both renderers use the same tokens:
+
+- `htmlout` swaps each highlightable block's text for a placeholder made of
+  letters and digits, renders the tree, then puts the highlighted HTML in the
+  placeholder's place. The renderer's escaping is never undone, and raw HTML
+  in the deck is never taken for a code block.
+- `pdfout` cannot ask `doctree` to colour a block, so it colours what `doctree`
+  drew. It lays every code panel out with a fill no theme uses (`CODE_MARK`),
+  then walks each page's content stream: at a marked panel it writes the real
+  shade, and splits each following mono-font `Tj` into one `Tj` per colour
+  inside the same text object. A `Tj` advances the pen by what it drew, so
+  nothing moves and the page count, which the overflow warning reads, is the
+  same as without highlighting. A run that is not the expected text leaves the
+  rest of its block plain.
 
 ## The gate
 
