@@ -17,6 +17,7 @@
 use strings;
 use lists;
 use convert;
+use math;
 
 /** The theme used when a deck names none. */
 export def const DEFAULT_THEME as string init "plain";
@@ -85,6 +86,41 @@ export def struct Stage {
     pageWidth as int,
     pageHeight as int
 };
+
+/**
+ * The token colours of one code palette, by highlight.js class: what the
+ * slideshow's `.hljs-*` rules and the PDF's coloured code draw with. A
+ * class not listed shares a colour with one that is (`meta` with `comment`,
+ * `name` with `keyword`, `attr` with `symbol`, `section` with `title`).
+ * @field comment {string} comments and `meta` (prompts, preprocessor lines)
+ * @field keyword {string} keywords and markup tag names
+ * @field typeName {string} type names
+ * @field literal {string} `true`, `false`, `null` and the like
+ * @field quoted {string} string literals
+ * @field number {string} numbers
+ * @field variable {string} `$variables`
+ * @field symbol {string} constants, keys and markup attributes
+ * @field builtin {string} built-ins and library prefixes
+ * @field title {string} called or defined functions, and sections
+ */
+export def struct Syntax {
+    comment as string,
+    keyword as string,
+    typeName as string,
+    literal as string,
+    quoted as string,
+    number as string,
+    variable as string,
+    symbol as string,
+    builtin as string,
+    title as string
+};
+
+/** The contrast every token colour keeps against its code background (WCAG AA). */
+export def const MIN_CONTRAST as float init 4.5;
+
+/** The contrast the `contrast` theme keeps instead (WCAG AAA). */
+export def const HIGH_CONTRAST as float init 7.0;
 
 /** A serif stack, for the book-like themes. */
 export def const SERIF as string init "Iowan Old Style, Palatino, Georgia, serif";
@@ -814,6 +850,277 @@ export func channel(bare as string, at as int) {
 }
 
 /**
+ * The token colours a palette starts from, before `legible` adjusts them to
+ * its code background.
+ *
+ * The Grimoire themes and `plain` take Grimoire's own pair
+ * (`apps/grimoire/src/palette.j`, "The syntax palette"): Atom One Light on a
+ * light palette, Atom One Dark on a dark one. `solar` takes the Solarized
+ * accents, which that palette shares between its two modes, and `contrast`
+ * a saturated set picked for a poor projector.
+ * @param name {string} the theme's name
+ * @param dark {bool} whether the palette is the theme's dark one
+ * @return {Syntax} the unadjusted token colours
+ */
+export func syntaxBase(name as string, dark as bool) {
+    if ($name == "solar") {
+        def comment as string init "#93a1a1";
+        if ($dark) {
+            $comment = "#839496";
+        }
+        return Syntax{
+            comment: $comment,
+            keyword: "#859900",
+            typeName: "#b58900",
+            literal: "#2aa198",
+            quoted: "#2aa198",
+            number: "#d33682",
+            variable: "#268bd2",
+            symbol: "#cb4b16",
+            builtin: "#dc322f",
+            title: "#268bd2"
+        };
+    }
+    if ($name == "contrast" and $dark) {
+        return Syntax{
+            comment: "#c8c8c8",
+            keyword: "#ffe14d",
+            typeName: "#5fe3ff",
+            literal: "#ffa657",
+            quoted: "#8dff8d",
+            number: "#ffa657",
+            variable: "#ff9ecb",
+            symbol: "#ffd27f",
+            builtin: "#ffd27f",
+            title: "#8cc8ff"
+        };
+    }
+    if ($name == "contrast") {
+        return Syntax{
+            comment: "#4a4a4a",
+            keyword: "#0000b0",
+            typeName: "#00566e",
+            literal: "#8a2a00",
+            quoted: "#005f00",
+            number: "#8a2a00",
+            variable: "#9a004a",
+            symbol: "#5e3c00",
+            builtin: "#5e3c00",
+            title: "#0035a0"
+        };
+    }
+    if ($dark) {
+        return Syntax{
+            comment: "#7f848e",
+            keyword: "#c678dd",
+            typeName: "#56b6c2",
+            literal: "#d19a66",
+            quoted: "#98c379",
+            number: "#d19a66",
+            variable: "#e06c75",
+            symbol: "#e5c07b",
+            builtin: "#e5c07b",
+            title: "#61afef"
+        };
+    }
+    return Syntax{
+        comment: "#9aa0a6",
+        keyword: "#a626a4",
+        typeName: "#0184bc",
+        literal: "#986801",
+        quoted: "#50a14f",
+        number: "#986801",
+        variable: "#e45649",
+        symbol: "#b26a00",
+        builtin: "#c18401",
+        title: "#4078f2"
+    };
+}
+
+/**
+ * The contrast a theme's token colours keep: AAA for `contrast`, AA for the rest.
+ * @param name {string} the theme's name
+ * @return {float} the minimum contrast ratio
+ */
+export func minContrast(name as string) {
+    if ($name == "contrast") {
+        return HIGH_CONTRAST;
+    }
+    return MIN_CONTRAST;
+}
+
+/**
+ * A palette's token colours on screen, each legible on its code background.
+ * @param t {Theme} the palette
+ * @return {Syntax} the colours the slideshow uses in that palette
+ */
+export func syntax(t as Theme) {
+    return legibleSyntax(syntaxBase($t.name, $t.dark), $t.codeBg, minContrast($t.name));
+}
+
+/**
+ * A theme's token colours in the PDF: the light palette's, each legible on
+ * the print code shade, since the PDF always prints light.
+ * @param t {Theme} either palette of the theme
+ * @return {Syntax} the colours the PDF draws code with
+ */
+export func printSyntax(t as Theme) {
+    return legibleSyntax(syntaxBase($t.name, false), $t.printCodeBg, minContrast($t.name));
+}
+
+/**
+ * Adjust every colour of a token palette to a background.
+ * @param s {Syntax} the colours to adjust
+ * @param bg {string} the code background
+ * @param minimum {float} the contrast each colour must reach
+ * @return {Syntax} the adjusted colours
+ */
+func legibleSyntax(s as Syntax, bg as string, minimum as float) {
+    return Syntax{
+        comment: legible($s.comment, $bg, $minimum),
+        keyword: legible($s.keyword, $bg, $minimum),
+        typeName: legible($s.typeName, $bg, $minimum),
+        literal: legible($s.literal, $bg, $minimum),
+        quoted: legible($s.quoted, $bg, $minimum),
+        number: legible($s.number, $bg, $minimum),
+        variable: legible($s.variable, $bg, $minimum),
+        symbol: legible($s.symbol, $bg, $minimum),
+        builtin: legible($s.builtin, $bg, $minimum),
+        title: legible($s.title, $bg, $minimum)
+    };
+}
+
+/**
+ * The colour a token class is drawn in, "" for plain text.
+ * @param s {Syntax} the token colours
+ * @param cls {string} a highlight.js class without its `hljs-` prefix
+ * @return {string} the colour, or "" when the class has none
+ */
+export func tokenColour(s as Syntax, cls as string) {
+    match ($cls) {
+        when "comment", "meta" { return $s.comment; }
+        when "keyword", "name" { return $s.keyword; }
+        when "type" { return $s.typeName; }
+        when "literal" { return $s.literal; }
+        when "string" { return $s.quoted; }
+        when "number" { return $s.number; }
+        when "variable" { return $s.variable; }
+        when "symbol", "attr" { return $s.symbol; }
+        when "built_in" { return $s.builtin; }
+        when "title", "section" { return $s.title; }
+    }
+    return "";
+}
+
+/**
+ * A colour's relative luminance, as WCAG 2 defines it.
+ * @param hex {string} a colour as `#rgb` or `#rrggbb`
+ * @return {float} 0 for black to 1 for white
+ * @throws {Error} kind "theme" when the string is not a hex colour
+ */
+export func luminance(hex as string) {
+    def c as Rgb init hexRgb($hex);
+    return 0.2126 * linear($c.red) + 0.7152 * linear($c.green) + 0.0722 * linear($c.blue);
+}
+
+/**
+ * One sRGB channel, linearised.
+ * @param v {int} the channel, 0-255
+ * @return {float} its linear value, 0-1
+ */
+func linear(v as int) {
+    def c as float init $v / 255;
+    if ($c <= 0.04045) {
+        return $c / 12.92;
+    }
+    return math.pow(($c + 0.055) / 1.055, 2.4);
+}
+
+/**
+ * The contrast ratio of two colours, as WCAG 2 defines it.
+ * @param a {string} one colour
+ * @param b {string} the other
+ * @return {float} 1 (no contrast) to 21 (black on white)
+ * @throws {Error} kind "theme" when either is not a hex colour
+ */
+export func contrast(a as string, b as string) {
+    def la as float init luminance($a);
+    def lb as float init luminance($b);
+    if ($la < $lb) {
+        def swap as float init $la;
+        $la = $lb;
+        $lb = $swap;
+    }
+    return ($la + 0.05) / ($lb + 0.05);
+}
+
+/**
+ * A colour made legible on a background: the colour itself when it already
+ * reaches the contrast, else the first mix of it towards black (on a light
+ * background) or white (on a dark one), in steps of 5%, that does.
+ * @param fg {string} the colour wanted
+ * @param bg {string} the background it sits on
+ * @param minimum {float} the contrast ratio to reach
+ * @return {string} a `#rrggbb` colour reaching the ratio
+ * @throws {Error} kind "theme" when either is not a hex colour
+ */
+export func legible(fg as string, bg as string, minimum as float) {
+    if (contrast($fg, $bg) >= $minimum) {
+        return $fg;
+    }
+    def towards as int init 255;
+    if (contrast("#000000", $bg) > contrast("#ffffff", $bg)) {
+        $towards = 0;
+    }
+    def c as Rgb init hexRgb($fg);
+    def out as string init $fg;
+    for (def keep as int init 95; $keep >= 0; $keep = $keep - 5) {
+        $out = rgbHex(Rgb{
+            red: mix($c.red, $towards, $keep),
+            green: mix($c.green, $towards, $keep),
+            blue: mix($c.blue, $towards, $keep)
+        });
+        if (contrast($out, $bg) >= $minimum) {
+            return $out;
+        }
+    }
+    return $out;
+}
+
+/**
+ * One channel mixed towards another.
+ * @param value {int} the channel's value
+ * @param target {int} the value it moves towards
+ * @param keep {int} how much of `value` stays, in percent
+ * @return {int} the mixed value
+ */
+func mix(value as int, target as int, keep as int) {
+    return ($value * $keep + $target * (100 - $keep) + 50) // 100;
+}
+
+/**
+ * Write three channels as a `#rrggbb` colour.
+ * @param c {Rgb} the channels, each 0-255
+ * @return {string} the colour, lower-case
+ */
+export func rgbHex(c as Rgb) {
+    return "#" + hexPair($c.red) + hexPair($c.green) + hexPair($c.blue);
+}
+
+/**
+ * One channel as two hex digits.
+ * @param v {int} 0-255
+ * @return {string} two lower-case digits
+ */
+func hexPair(v as int) {
+    def digits as string init convert.toString($v, 16);
+    if (len($digits) < 2) {
+        return "0" + $digits;
+    }
+    return $digits;
+}
+
+/**
  * Whether a name is a theme this build ships.
  * @param name {string} the name to test
  * @return {bool} true when `theme` would accept it
@@ -876,7 +1183,26 @@ export func palette(t as Theme) {
         "    --code-bg: " + $t.codeBg + ";\n" +
         "    --code-fg: " + $t.codeFg + ";\n" +
         "    --quote-bar: " + $t.quoteBar + ";\n" +
+        syntaxProperties(syntax($t)) +
         "    color-scheme: " + $scheme + ";\n";
+}
+
+/**
+ * A palette's token colours as CSS custom properties.
+ * @param s {Syntax} the token colours
+ * @return {string} the declarations, one per line
+ */
+export func syntaxProperties(s as Syntax) {
+    return "    --syn-comment: " + $s.comment + ";\n" +
+        "    --syn-keyword: " + $s.keyword + ";\n" +
+        "    --syn-type: " + $s.typeName + ";\n" +
+        "    --syn-literal: " + $s.literal + ";\n" +
+        "    --syn-string: " + $s.quoted + ";\n" +
+        "    --syn-number: " + $s.number + ";\n" +
+        "    --syn-variable: " + $s.variable + ";\n" +
+        "    --syn-symbol: " + $s.symbol + ";\n" +
+        "    --syn-builtin: " + $s.builtin + ";\n" +
+        "    --syn-title: " + $s.title + ";\n";
 }
 
 /**
@@ -1067,6 +1393,19 @@ pre code {
     line-height: 1.45;
 }
 
+/* Token colours of the build-time highlighter, highlight.js class names. */
+pre > code > .hljs-comment { color: var(--syn-comment); font-style: italic; }
+pre > code > .hljs-meta { color: var(--syn-comment); }
+pre > code > .hljs-keyword, pre > code > .hljs-name { color: var(--syn-keyword); }
+pre > code > .hljs-type { color: var(--syn-type); }
+pre > code > .hljs-literal { color: var(--syn-literal); }
+pre > code > .hljs-string { color: var(--syn-string); }
+pre > code > .hljs-number { color: var(--syn-number); }
+pre > code > .hljs-variable { color: var(--syn-variable); }
+pre > code > .hljs-symbol, pre > code > .hljs-attr { color: var(--syn-symbol); }
+pre > code > .hljs-built_in { color: var(--syn-builtin); }
+pre > code > .hljs-title, pre > code > .hljs-section { color: var(--syn-title); }
+
 blockquote {
     margin: 0 0 0.7em;
     padding: 0.2em 0 0.2em 1em;
@@ -1213,31 +1552,31 @@ body > #cantrip-help kbd {
 }
 
 /*
- * The touch bar: keys for a device without a keyboard. Hidden unless the main
- * pointer is coarse and cannot hover (a phone or tablet), so a laptop with a
- * touch screen keeps the plain slide. It sits above the notes and the overview,
+ * The touch bar: keys for a device without a keyboard. Hidden until the script
+ * marks it cantrip-touch: at once on a device with a touch screen (a phone, a
+ * tablet, a touch laptop), otherwise at the first touch, so a mouse alone
+ * never brings it up.
+ * It sits above the notes and the overview,
  * so its buttons also close what they opened, and is always dark, like the
  * help overlay. The script adds cantrip-shown for a few seconds at a time; without
  * it the bar is transparent and lets taps through to the slide.
  */
 body > #cantrip-touchbar { display: none; }
-@media (hover: none) and (pointer: coarse) {
-    body > #cantrip-touchbar {
-        position: fixed;
-        top: 8px;
-        right: 8px;
-        display: flex;
-        gap: 4px;
-        padding: 4px;
-        background: rgba(20, 22, 28, 0.72);
-        border-radius: 10px;
-        z-index: 16;
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 300ms ease;
-    }
-    body > #cantrip-touchbar.cantrip-shown { opacity: 1; pointer-events: auto; }
+body > #cantrip-touchbar.cantrip-touch {
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: rgba(20, 22, 28, 0.72);
+    border-radius: 10px;
+    z-index: 16;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 300ms ease;
 }
+body > #cantrip-touchbar.cantrip-touch.cantrip-shown { opacity: 1; pointer-events: auto; }
 body > #cantrip-touchbar > button {
     width: 40px;
     height: 40px;

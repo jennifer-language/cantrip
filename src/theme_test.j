@@ -302,8 +302,8 @@ func testCssCoversTransitions() {
 func testCssKeepsSwipesForTheSlides() {
     def out as string init css(theme("plain", "light"), theme("plain", "dark"), stage("16:9"));
     testing.assertContains($out, "overscroll-behavior: none;");
-    testing.assertContains($out, "@media (hover: none) and (pointer: coarse)");
-    testing.assertContains($out, 'body > #cantrip-touchbar.cantrip-shown { opacity: 1;');
+    testing.assertContains($out, 'body > #cantrip-touchbar { display: none; }');
+    testing.assertContains($out, '#cantrip-touchbar.cantrip-touch.cantrip-shown { opacity: 1;');
 }
 
 /**
@@ -554,4 +554,109 @@ func testPalette() {
     testing.assertContains($dark, "    color-scheme: dark;\n");
     testing.assertContains(palette(theme("nordic", "light")), "    color-scheme: light;\n");
     testing.assertFalse(strings.contains($dark, "%"));
+}
+
+/**
+ * Every token colour of every palette reaches its contrast against the code
+ * background it is drawn on: AA everywhere, AAA in `contrast`; on screen in
+ * both modes, and in the PDF on the print shade.
+ */
+func testTokenColoursAreLegible() {
+    def classes as list of string init [
+        "comment",
+        "keyword",
+        "type",
+        "literal",
+        "string",
+        "number",
+        "variable",
+        "symbol",
+        "built_in",
+        "title"
+    ];
+    for (def t in all()) {
+        def screen as Syntax init syntax($t);
+        def paper as Syntax init printSyntax($t);
+        for (def cls in $classes) {
+            testing.assertTrue(contrast(tokenColour($screen, $cls), $t.codeBg) >=
+                minContrast($t.name));
+            testing.assertTrue(
+                contrast(tokenColour($paper, $cls), $t.printCodeBg) >= minContrast($t.name));
+        }
+    }
+    testing.assertEqual(minContrast("contrast"), HIGH_CONTRAST);
+    testing.assertEqual(minContrast("nordic"), MIN_CONTRAST);
+    testing.assertTrue(MIN_CONTRAST >= 4.5);
+}
+
+/**
+ * The shared themes start from Grimoire's token colours, and a colour that
+ * already reads on its background is kept as it is.
+ */
+func testSyntaxBaseMatchesGrimoire() {
+    testing.assertEqual(syntaxBase("nordic", false).keyword, "#a626a4");
+    testing.assertEqual(syntaxBase("nordic", true).keyword, "#c678dd");
+    testing.assertEqual(syntaxBase("plain", true).quoted, "#98c379");
+    testing.assertEqual(syntaxBase("solar", false).keyword, syntaxBase("solar", true).keyword);
+    testing.assertNotEqual(
+        syntaxBase("contrast", false).keyword,
+        syntaxBase("plain", false).keyword);
+    testing.assertEqual(syntax(theme("carbon", "dark")).keyword, "#c678dd");
+    testing.assertEqual(
+        printSyntax(theme("carbon", "dark")),
+        printSyntax(theme("carbon", "light")));
+}
+
+/** The WCAG arithmetic, on the cases with known answers. */
+func testContrast() {
+    testing.assertEqual(luminance("#ffffff"), 1.0);
+    testing.assertEqual(luminance("#000000"), 0.0);
+    testing.assertTrue(contrast("#000000", "#ffffff") > 20.99);
+    testing.assertEqual(contrast("#123456", "#abcdef"), contrast("#abcdef", "#123456"));
+    testing.assertEqual(contrast("#777777", "#777777"), 1.0);
+}
+
+/** A colour too faint is darkened on light ground and lightened on dark. */
+func testLegible() {
+    testing.assertEqual(legible("#000000", "#ffffff", 4.5), "#000000");
+    def dim as string init legible("#9aa0a6", "#f4f5f7", 4.5);
+    testing.assertNotEqual($dim, "#9aa0a6");
+    testing.assertTrue(contrast($dim, "#f4f5f7") >= 4.5);
+    testing.assertTrue(luminance($dim) < luminance("#9aa0a6"));
+    def lit as string init legible("#586e75", "#073642", 4.5);
+    testing.assertTrue(contrast($lit, "#073642") >= 4.5);
+    testing.assertTrue(luminance($lit) > luminance("#586e75"));
+}
+
+func testRgbHex() {
+    testing.assertEqual(rgbHex(Rgb{red: 1, green: 2, blue: 255}), "#0102ff");
+    testing.assertEqual(rgbHex(hexRgb("#A0b1C2")), "#a0b1c2");
+}
+
+/** Each highlight.js class maps to a colour; plain text and unknown classes to none. */
+func testTokenColour() {
+    def s as Syntax init syntax(theme("plain", "light"));
+    testing.assertEqual(tokenColour($s, "keyword"), $s.keyword);
+    testing.assertEqual(tokenColour($s, "name"), $s.keyword);
+    testing.assertEqual(tokenColour($s, "meta"), $s.comment);
+    testing.assertEqual(tokenColour($s, "attr"), $s.symbol);
+    testing.assertEqual(tokenColour($s, "section"), $s.title);
+    testing.assertEqual(tokenColour($s, "string"), $s.quoted);
+    testing.assertEqual(tokenColour($s, "type"), $s.typeName);
+    testing.assertEqual(tokenColour($s, "built_in"), $s.builtin);
+    testing.assertEqual(tokenColour($s, ""), "");
+    testing.assertEqual(tokenColour($s, "bogus"), "");
+}
+
+/** Both palettes carry their token colours, and the stylesheet uses them. */
+func testCssColoursTokens() {
+    def dark as Theme init theme("nordic", "dark");
+    testing.assertContains(palette($dark), "    --syn-keyword: " + syntax($dark).keyword + ";\n");
+    testing.assertContains(syntaxProperties(syntax($dark)), "--syn-title: ");
+    def out as string init css(theme("nordic", "light"), $dark, stage("16:9"));
+    testing.assertContains($out, "--syn-comment: " + syntax(theme("nordic", "light")).comment);
+    testing.assertContains($out, "--syn-comment: " + syntax($dark).comment);
+    for (def cls in ["comment", "keyword", "type", "string", "number", "variable", "title"]) {
+        testing.assertContains($out, "pre > code > .hljs-" + $cls);
+    }
 }
