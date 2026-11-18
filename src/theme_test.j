@@ -306,6 +306,16 @@ func testCssKeepsSwipesForTheSlides() {
     testing.assertContains($out, 'body > #cantrip-touchbar.cantrip-shown { opacity: 1;');
 }
 
+/**
+ * A column aligned with `:-:` or `--:` keeps its alignment in the browser: the
+ * cells carry `align`, which the left-aligning default rule would override.
+ */
+func testCssHonoursColumnAlignment() {
+    def out as string init css(theme("plain", "light"), theme("plain", "dark"), stage("16:9"));
+    testing.assertContains($out, 'th[align="center"], td[align="center"] { text-align: center; }');
+    testing.assertContains($out, 'th[align="right"], td[align="right"] { text-align: right; }');
+}
+
 /** A dark theme's background is darker than its text, and the reverse. */
 func testPalettePolarity() {
     for (def t in all()) {

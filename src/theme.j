@@ -1080,6 +1080,8 @@ hr { border: 0; border-top: 2px solid var(--quote-bar); margin: 1em 0; }
 
 table { border-collapse: collapse; margin: 0 0 0.7em; }
 th, td { border: 1px solid var(--quote-bar); padding: 8px 14px; text-align: left; }
+th[align="center"], td[align="center"] { text-align: center; }
+th[align="right"], td[align="right"] { text-align: right; }
 th { background: var(--code-bg); font-weight: 600; }
 
 img { max-width: 100%; max-height: 70%; height: auto; display: block; }
