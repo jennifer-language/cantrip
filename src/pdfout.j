@@ -27,12 +27,15 @@
 use strings;
 use maps;
 use convert;
+use encoding;
+use lists;
 
 import "markdown.j" as markdown;
 import "doctree.j" as doctree;
 import "pdf.j" as pdf;
 import "./slides.j" as slides;
 import "./theme.j" as theme;
+import "./highlight.j" as highlight;
 
 /** The application name written into the PDF's Creator field. */
 export def const CREATOR as string init "cantrip";
@@ -56,6 +59,13 @@ export def const SCALE_DEN as int init 2;
 export def const IMAGE_DPI as int init 144;
 
 /**
+ * The fill a code panel is laid out with while code is highlighted: a colour
+ * no theme uses, so the panels can be found in the laid-out pages and given
+ * their real shade. See `paintCode`.
+ */
+export def const CODE_MARK as string init "#010203";
+
+/**
  * What the PDF renderer needs beyond the deck itself.
  * @field theme {string} theme name, "" for the deck's own or the default
  * @field ratio {string} ratio name, "" for the deck's own or the default
@@ -63,6 +73,8 @@ export def const IMAGE_DPI as int init 144;
  * @field notes {bool} print each slide's speaker notes under its body
  * @field numbers {bool} draw a `page / total` footer
  * @field bookmarks {int} heading depth to add to the PDF outline, 0 for none
+ * @field highlight {bool} colour code blocks in a language `highlight` knows;
+ *     the deck's `highlight: false` turns it off too
  * @field images {map of string to pdf.Image} pictures, keyed by source URL
  */
 export def struct Options {
@@ -72,11 +84,13 @@ export def struct Options {
     notes as bool,
     numbers as bool,
     bookmarks as int,
+    highlight as bool,
     images as map of string to pdf.Image
 };
 
 /**
- * The default options: numbered, bookmarked one level deep, notes omitted.
+ * The default options: numbered, highlighted, bookmarked two levels deep,
+ * notes omitted.
  *
  * Notes are off by default because the PDF is the deck as the audience sees
  * it; `--notes` turns it into the presenter's copy.
@@ -90,6 +104,7 @@ export func defaults() {
         notes: false,
         numbers: true,
         bookmarks: 2,
+        highlight: true,
         images: {}
     };
 }
@@ -314,6 +329,469 @@ export func footer(deck as slides.Deck, opts as Options) {
 }
 
 /**
+ * Whether code blocks are highlighted: the caller's option, and the deck's
+ * `highlight:` front-matter key, which is checked even when the option is off.
+ * @param deck {slides.Deck} the deck being rendered
+ * @param opts {Options} the caller's options
+ * @return {bool} true when both allow it
+ * @throws {Error} kind "highlight" when the deck's value is not true or false
+ */
+export func pickHighlight(deck as slides.Deck, opts as Options) {
+    def wanted as bool init highlight.enabled(slides.metaOr($deck.meta, "highlight", ""));
+    return $opts.highlight and $wanted;
+}
+
+/**
+ * One line of a code block as the PDF draws it, with a colour per character.
+ * @field chars {list of string} the line's characters, as the layout draws them
+ *     (a character the fonts cannot encode already replaced)
+ * @field colours {list of string} per character, the content-stream operator
+ *     that sets its colour (`r g b rg`)
+ * @field italic {list of bool} per character, whether it is set oblique (a comment)
+ */
+export def struct PaintLine {
+    chars as list of string,
+    colours as list of string,
+    italic as list of bool
+};
+
+/**
+ * One code block's colouring, in the order the layout draws the blocks.
+ * @field coloured {bool} false for a block in no known language, left as laid out
+ * @field lines {list of PaintLine} the block's lines
+ */
+export def struct Painted {
+    coloured as bool,
+    lines as list of PaintLine
+};
+
+/**
+ * Every code block's colouring, in document order. A struct, so passing it
+ * borrows the nested lists rather than copying them.
+ * @field blocks {list of Painted} one entry per code block
+ */
+export def struct Plan {
+    blocks as list of Painted
+};
+
+/**
+ * Work out how every code block in a tree is to be coloured.
+ *
+ * The tree is walked in the order the layout draws it, so the n-th entry is
+ * the n-th code panel on the pages. A block in a language `highlight` does
+ * not know still has an entry, uncoloured, so the count stays in step.
+ * @param tree {doctree.Node} the parsed deck
+ * @param colours {theme.Syntax} the token colours to draw with
+ * @param unencodable {string} what the layout draws for a character the fonts
+ *     cannot encode
+ * @return {list of Painted} one entry per code block
+ */
+export func paintPlan(tree as doctree.Node, colours as theme.Syntax, unencodable as string) {
+    def out as list of Painted init [];
+    for (def block in codeNodes($tree)) {
+        def p as Painted init Painted{coloured: false, lines: []};
+        if (highlight.handles($block.lang)) {
+            $p.coloured = true;
+            $p.lines = paintLines($block.text, $block.lang, $colours, $unencodable);
+        }
+        $out[] = $p;
+    }
+    return $out;
+}
+
+/**
+ * Every code block below a node, in document order.
+ * @param node {doctree.Node} the subtree to walk
+ * @return {list of doctree.Node} the `code` nodes
+ */
+export func codeNodes(node as doctree.Node) {
+    def out as list of doctree.Node init [];
+    if ($node.kind == "code") {
+        $out[] = $node;
+    }
+    for (def child in $node.children) {
+        for (def found in codeNodes($child)) {
+            $out[] = $found;
+        }
+    }
+    return $out;
+}
+
+/**
+ * Colour one code block's lines, split where the layout splits them.
+ * @param text {string} the block's source
+ * @param lang {string} its fence's language tag
+ * @param colours {theme.Syntax} the token colours to draw with
+ * @param unencodable {string} the layout's stand-in for an unencodable character
+ * @return {list of PaintLine} one entry per source line
+ */
+export func paintLines(
+    text as string,
+    lang as string,
+    colours as theme.Syntax,
+    unencodable as string) {
+    def ops as map of string to string init {};
+    def lines as list of PaintLine init [PaintLine{chars: [], colours: [], italic: []}];
+    for (def t in highlight.tokens($text, $lang)) {
+        if (not maps.has($ops, $t.cls)) {
+            $ops[$t.cls] = colourOp(theme.tokenColour($colours, $t.cls));
+        }
+        def op as string init $ops[$t.cls];
+        def slanted as bool init $t.cls == "comment";
+        for (def ch in strings.chars($t.text)) {
+            if ($ch == "\n") {
+                $lines[] = PaintLine{chars: [], colours: [], italic: []};
+                continue;
+            }
+            def last as int init len($lines) - 1;
+            # The layout replaces what the fonts cannot draw, so the colours
+            # follow the characters it really draws.
+            for (def drawn in strings.chars(pdf.toWinAnsi($ch, $unencodable))) {
+                $lines[$last].chars[] = $drawn;
+                $lines[$last].colours[] = $op;
+                $lines[$last].italic[] = $slanted;
+            }
+        }
+    }
+    return $lines;
+}
+
+/**
+ * The content-stream operator that sets a fill colour, as `pdf` writes it.
+ * @param hex {string} the colour, "" for the text colour (black)
+ * @return {string} the `r g b rg` line, without its newline
+ */
+export func colourOp(hex as string) {
+    def c as theme.Rgb init theme.Rgb{red: 0, green: 0, blue: 0};
+    if ($hex != "") {
+        $c = theme.hexRgb($hex);
+    }
+    return colourLines($c)[0];
+}
+
+/**
+ * The two content-stream lines `pdf.color` writes for a colour: fill, then stroke.
+ * @param c {theme.Rgb} the colour
+ * @return {list of string} the `rg` line and the `RG` line
+ */
+func colourLines(c as theme.Rgb) {
+    def pg as pdf.Page init pdf.color(pdf.page(1, 1), $c.red, $c.green, $c.blue);
+    return strings.split(strings.trimRight($pg.content), "\n");
+}
+
+/**
+ * One character as it appears inside a PDF string literal, the way `pdf`
+ * escapes text for a standard font: WinAnsi bytes, with `\`, `(`, `)` and
+ * every byte outside printable ASCII escaped.
+ * @param ch {string} one character the standard fonts can encode
+ * @return {string} its escaped form
+ */
+export func pdfChar(ch as string) {
+    def parts as list of string init [];
+    for (def b in encoding.encode("windows-1252", $ch)) {
+        if ($b == 92) {
+            $parts[] = "\\\\";
+        } elseif ($b == 40) {
+            $parts[] = "\\(";
+        } elseif ($b == 41) {
+            $parts[] = "\\)";
+        } elseif ($b == 13) {
+            $parts[] = "\\r";
+        } elseif ($b == 10) {
+            $parts[] = "\\n";
+        } elseif ($b < 32 or $b >= 127) {
+            $parts[] = "\\" + convert.toString(($b >> 6) & 7) + convert.toString(($b >> 3) & 7) +
+                convert.toString($b & 7);
+        } else {
+            $parts[] = convert.fromCodepoint($b);
+        }
+    }
+    return strings.join($parts, "");
+}
+
+/**
+ * What `paintCode` writes with, worked out once per document.
+ * @field mark {list of string} the two colour lines of a `CODE_MARK` panel
+ * @field shade {list of string} the two colour lines of the real panel shade
+ * @field black {string} the operator that sets the text colour back to black
+ * @field fontLine {string} the mono font at body size, as the layout selects it
+ * @field slantLine {string} the oblique mono font at body size, "" when the mono
+ *     font has no oblique face
+ */
+export def struct Ink {
+    mark as list of string,
+    shade as list of string,
+    black as string,
+    fontLine as string,
+    slantLine as string
+};
+
+/**
+ * Where `paintCode` is in the plan, carried from page to page.
+ * @field next {int} the index of the next code panel to be met
+ * @field active {bool} whether the runs being read belong to a coloured block
+ * @field block {int} the block being read
+ * @field line {int} the line of that block the next run continues
+ * @field at {int} the character of that line the next run starts at
+ * @field slanted {bool} whether the page being painted uses the oblique face
+ */
+export def struct Cursor {
+    next as int,
+    active as bool,
+    block as int,
+    line as int,
+    at as int,
+    slanted as bool
+};
+
+/**
+ * The colours and fonts `paintCode` writes with.
+ * @param lay {doctree.PdfOptions} the layout options, for the mono font and size
+ * @param real {doctree.Fill} the shade the panels really have
+ * @return {Ink} the operators, ready to write
+ */
+export func ink(lay as doctree.PdfOptions, real as doctree.Fill) {
+    def size as string init convert.toString($lay.bodySize);
+    def out as Ink init Ink{
+        mark: colourLines(theme.hexRgb(CODE_MARK)),
+        shade: colourLines(theme.Rgb{red: $real.r, green: $real.g, blue: $real.b}),
+        black: colourOp(""),
+        fontLine: "/" + $lay.monoFont + " " + $size + " Tf",
+        slantLine: ""
+    };
+    if (not $real.on) {
+        $out.shade = colourLines(theme.Rgb{red: 0, green: 0, blue: 0});
+    }
+    if ($lay.monoFont == "Courier") {
+        $out.slantLine = "/Courier-Oblique " + $size + " Tf";
+    }
+    return $out;
+}
+
+/**
+ * How far one drawn run reaches into the line it continues.
+ * @param pl {PaintLine} the line the run belongs to
+ * @param at {int} the character the run starts at
+ * @param payload {string} the run's text as the content stream holds it, escaped
+ * @return {int} the index just past the run's last character, -1 when the run
+ *     is not the next piece of the line
+ */
+export func runEnd(pl as PaintLine, at as int, payload as string) {
+    def acc as string init "";
+    def k as int init $at;
+    while ($k < len($pl.chars) and len($acc) < len($payload)) {
+        $acc = $acc + pdfChar($pl.chars[$k]);
+        $k = $k + 1;
+    }
+    if ($acc != $payload or ($payload == "" and $at < len($pl.chars))) {
+        return -1;
+    }
+    return $k;
+}
+
+/**
+ * The operators that draw characters `first` to `stop` of a line, one `Tj` per
+ * run of one colour and slant, after the run's `BT`, font and position lines.
+ * @param pl {PaintLine} the line
+ * @param first {int} the first character
+ * @param stop {int} the index just past the last
+ * @param pen {Ink} the operators to write with
+ * @return {list of string} the lines that replace the run's `Tj` line
+ */
+export func drawRun(pl as PaintLine, first as int, stop as int, pen as Ink) {
+    def out as list of string init [];
+    def current as string init "";
+    def oblique as bool init false;
+    def r as int init $first;
+    while ($r < $stop) {
+        def op as string init $pl.colours[$r];
+        def it as bool init $pl.italic[$r] and $pen.slantLine != "";
+        def e as int init $r;
+        def text as list of string init [];
+        while ($e < $stop and $pl.colours[$e] == $op and
+            ($pl.italic[$e] and $pen.slantLine != "") == $it) {
+            $text[] = pdfChar($pl.chars[$e]);
+            $e = $e + 1;
+        }
+        if ($op != $current) {
+            $out[] = $op;
+            $current = $op;
+        }
+        if ($it != $oblique) {
+            $out[] = slantOrNot($pen, $it);
+            $oblique = $it;
+        }
+        $out[] = "(" + strings.join($text, "") + ") Tj";
+        $r = $e;
+    }
+    if ($stop == $first) {
+        $out[] = "() Tj";
+    }
+    if ($current != "" and $current != $pen.black) {
+        $out[] = $pen.black;
+    }
+    return $out;
+}
+
+/**
+ * The font line for an oblique or an upright run.
+ * @param pen {Ink} the operators to write with
+ * @param oblique {bool} whether the run is a comment
+ * @return {string} the `Tf` line
+ */
+func slantOrNot(pen as Ink, oblique as bool) {
+    if ($oblique) {
+        return $pen.slantLine;
+    }
+    return $pen.fontLine;
+}
+
+/**
+ * Whether the content lines from `i` are one text run in the mono font at
+ * body size: `BT`, the font, the position, one `(...) Tj`, `ET`.
+ * @param src {list of string} a page's content lines
+ * @param i {int} where the run would start
+ * @param pen {Ink} for the font line to match
+ * @return {bool} true for such a run
+ */
+func isMonoRun(src as list of string, i as int, pen as Ink) {
+    if ($i + 4 >= len($src) or $src[$i] != "BT" or $src[$i + 4] != "ET") {
+        return false;
+    }
+    return $src[$i + 1] == $pen.fontLine and strings.startsWith($src[$i + 3], "(") and
+        strings.endsWith($src[$i + 3], ") Tj");
+}
+
+/**
+ * Start the next block at a code panel.
+ * @param c {Cursor} where painting is
+ * @param plan {Plan} the colouring of every block
+ * @return {Cursor} the cursor at the start of the panel's block
+ */
+func enterPanel(c as Cursor, plan as Plan) {
+    def out as Cursor init $c;
+    $out.active = false;
+    if ($c.next < len($plan.blocks)) {
+        $out.block = $c.next;
+        $out.active = $plan.blocks[$c.next].coloured and len($plan.blocks[$c.next].lines) > 0;
+        $out.line = 0;
+        $out.at = 0;
+    }
+    $out.next = $c.next + 1;
+    return $out;
+}
+
+/**
+ * The result of painting one page.
+ * @field lines {list of string} the page's new content lines
+ * @field cursor {Cursor} where painting goes on from on the next page
+ */
+export def struct PagePaint {
+    lines as list of string,
+    cursor as Cursor
+};
+
+/**
+ * Paint the code on one page's content lines.
+ * @param src {list of string} the page's content, split into lines
+ * @param plan {Plan} the colouring of every block
+ * @param pen {Ink} the operators to write with
+ * @param start {Cursor} where painting stands as the page begins
+ * @return {PagePaint} the new lines and where painting stands after them
+ */
+export func paintPage(src as list of string, plan as Plan, pen as Ink, start as Cursor) {
+    def c as Cursor init $start;
+    def out as list of string init [];
+    def i as int init 0;
+    while ($i < len($src)) {
+        if ($i + 1 < len($src) and $src[$i] == $pen.mark[0] and $src[$i + 1] == $pen.mark[1]) {
+            $out[] = $pen.shade[0];
+            $out[] = $pen.shade[1];
+            $c = enterPanel($c, $plan);
+            $i = $i + 2;
+            continue;
+        }
+        if (not $c.active or not isMonoRun($src, $i, $pen)) {
+            $out[] = $src[$i];
+            $i = $i + 1;
+            continue;
+        }
+        def pl as PaintLine init $plan.blocks[$c.block].lines[$c.line];
+        def tj as string init $src[$i + 3];
+        def k as int init runEnd($pl, $c.at, strings.substring($tj, 1, len($tj) - 4));
+        if ($k < 0) {
+            # Not the text expected: leave the rest of this block as laid out.
+            $c.active = false;
+            continue;
+        }
+        $out[] = "BT";
+        $out[] = $pen.fontLine;
+        $out[] = $src[$i + 2];
+        for (def op in drawRun($pl, $c.at, $k, $pen)) {
+            $out[] = $op;
+            $c.slanted = $c.slanted or $op == $pen.slantLine;
+        }
+        $out[] = "ET";
+        $c.at = $k;
+        if ($k >= len($pl.chars)) {
+            $c.line = $c.line + 1;
+            $c.at = 0;
+            $c.active = $c.line < len($plan.blocks[$c.block].lines);
+        }
+        $i = $i + 5;
+    }
+    return PagePaint{lines: $out, cursor: $c};
+}
+
+/**
+ * Colour the code panels of a laid-out document.
+ *
+ * `doctree` draws a code block in one colour and offers no hook to change
+ * that, so this works on what it produced. While highlighting, every code
+ * panel is laid out with the fill `CODE_MARK`, which no theme uses; each
+ * panel's two colour lines are turned back into the real shade here, and the
+ * text lines that follow it, each a `BT ... (text) Tj ET` run in the mono font
+ * at body size, are split into one `Tj` per colour run inside the same text
+ * object (comments in the oblique face). A `Tj` advances the pen by the glyphs
+ * it drew, and the oblique face has the same widths, so the runs land exactly
+ * where the one run stood: nothing moves, no page is added, and the overflow
+ * count is unchanged.
+ *
+ * A wrapped line arrives as several runs; each must be the next piece of the
+ * expected line, so a run that does not match leaves the rest of that block
+ * as laid out rather than colouring the wrong text. The output depends only
+ * on the input, so a rebuild is byte-identical.
+ * @param doc {pdf.Document} the document `doctree` laid out with `CODE_MARK`
+ * @param plan {Plan} the colouring of every code block, in document order
+ * @param lay {doctree.PdfOptions} the layout options, for the mono font and size
+ * @param real {doctree.Fill} the shade the panels really have
+ * @return {pdf.Document} the same document with its panels shaded and coloured
+ */
+export func paintCode(
+    doc as pdf.Document,
+    plan as Plan,
+    lay as doctree.PdfOptions,
+    real as doctree.Fill) {
+    def pen as Ink init ink($lay, $real);
+    def c as Cursor init Cursor{next: 0, active: false, block: 0, line: 0, at: 0, slanted: false};
+    def pages as list of pdf.Page init [];
+    for (def pg in $doc.pages) {
+        $c.slanted = false;
+        def painted as PagePaint init paintPage(strings.split($pg.content, "\n"), $plan, $pen, $c);
+        $c = $painted.cursor;
+        def out as pdf.Page init $pg;
+        $out.content = strings.join($painted.lines, "\n");
+        if ($c.slanted and not lists.contains($out.fonts, "Courier-Oblique")) {
+            $out.fonts[] = "Courier-Oblique";
+        }
+        $pages[] = $out;
+    }
+    def result as pdf.Document init $doc;
+    $result.pages = $pages;
+    return $result;
+}
+
+/**
  * Lay a deck out as a finished PDF document, ready to serialise.
  *
  * Slides are laid out as one document with a page break between them, so a
@@ -325,12 +803,26 @@ export func footer(deck as slides.Deck, opts as Options) {
  * @param opts {Options} how to render it
  * @return {pdf.Document} the laid-out, scaled, footed document
  * @throws {Error} kind "theme" when the theme or ratio name is unknown
+ * @throws {Error} kind "highlight" when the deck's `highlight:` is not true or false
  * @throws {Error} kind "limit" when a document exceeds the parser's budget
  */
 export func document(deck as slides.Deck, opts as Options) {
     def source as string init slides.kbdToCode(slides.toMarkdown($deck, $opts.notes));
     def tree as doctree.Node init markdown.parse($source);
-    def laid as pdf.Document init doctree.renderPdfDoc($tree, layout($deck, $opts));
+    def lay as doctree.PdfOptions init layout($deck, $opts);
+    def laid as pdf.Document;
+    if (pickHighlight($deck, $opts)) {
+        def real as doctree.Fill init $lay.codeFill;
+        $lay.codeFill = fill(CODE_MARK);
+        $laid = doctree.renderPdfDoc($tree, $lay);
+        def blocks as list of Painted init paintPlan(
+            $tree,
+            theme.printSyntax(pickTheme($deck, $opts)),
+            $lay.unencodable);
+        $laid = paintCode($laid, Plan{blocks: $blocks}, $lay, $real);
+    } else {
+        $laid = doctree.renderPdfDoc($tree, $lay);
+    }
     def doc as pdf.Document init magnify($laid, pickStage($deck, $opts));
     def label as pdf.PageLabel init footer($deck, $opts);
     if ($label.left != "" or $label.right != "") {

@@ -371,3 +371,270 @@ func onePixelPng() {
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGMAAQAABQAB" +
             "lpSm1gAAAABJRU5ErkJggg==");
 }
+
+/**
+ * Lay a deck out and report how it failed.
+ * @param deck {slides.Deck} the deck
+ * @return {string} the Error kind it threw, "" when it did not throw
+ */
+func documentFailure(deck as slides.Deck) {
+    try {
+        document($deck, defaults());
+    } catch (e) {
+        return $e.kind;
+    }
+    return "";
+}
+
+/**
+ * Every page's content stream, joined.
+ * @param doc {pdf.Document} the document
+ * @return {string} the content of all its pages
+ */
+func contentOf(doc as pdf.Document) {
+    def parts as list of string init [];
+    for (def pg in $doc.pages) {
+        $parts[] = $pg.content;
+    }
+    return strings.join($parts, "\n");
+}
+
+/**
+ * The options with highlighting off.
+ * @return {Options} the defaults, unhighlighted
+ */
+func plainOptions() {
+    def opts as Options init defaults();
+    $opts.highlight = false;
+    return $opts;
+}
+
+/** The panel marker is a colour no theme uses, and none is left in the output. */
+func testCodeMarkIsNoThemeColour() {
+    for (def t in theme.all()) {
+        for (def c in [
+            $t.background,
+            $t.foreground,
+            $t.accent,
+            $t.codeBg,
+            $t.printCodeBg,
+            $t.printQuoteBar
+        ]) {
+            testing.assertNotEqual(theme.hexRgb($c), theme.hexRgb(CODE_MARK));
+        }
+    }
+    def got as string init contentOf(document(fixture(), defaults()));
+    testing.assertFalse(strings.contains($got, colourOp(CODE_MARK)));
+    testing.assertContains($got, colourOp(theme.theme("plain", "light").printCodeBg));
+}
+
+/** Code in a known language is drawn in the theme's print token colours. */
+func testDocumentColoursCode() {
+    def deck as slides.Deck init slides.parse(
+        "---\ntheme: nordic\nmode: dark\n---\n# C\n\n" +
+            "```jennifer\n# note\ndef x as int init 1;\n```\n");
+    def doc as pdf.Document init document($deck, defaults());
+    def got as string init contentOf($doc);
+    def s as theme.Syntax init theme.printSyntax(theme.theme("nordic", "light"));
+    testing.assertContains($got, colourOp($s.keyword) + "\n(def) Tj");
+    testing.assertContains($got, colourOp($s.typeName) + "\n(int) Tj");
+    testing.assertContains($got, colourOp($s.number) + "\n(1) Tj");
+    testing.assertContains($got, "/Courier-Oblique 13 Tf\n(# note) Tj");
+    testing.assertTrue(lists.contains($doc.pages[0].fonts, "Courier-Oblique"));
+    testing.assertContains($got, colourOp("") + "\nET");
+    def plain as string init contentOf(document($deck, plainOptions()));
+    testing.assertFalse(strings.contains($plain, colourOp($s.keyword)));
+    testing.assertContains($plain, "(def x as int init 1;) Tj");
+    testing.assertTrue(len(render($deck, defaults())) > 500);
+}
+
+/**
+ * Turning highlighting off, by option or front matter, gives exactly the PDF
+ * Cantrip drew before it highlighted; so does a block in no known language.
+ */
+func testUnhighlightedIsUnchanged() {
+    def quiet as slides.Deck init slides.parse("---\nhighlight: false\n---\n" +
+        "# C\n\n```js\nlet x;\n```\n");
+    testing.assertFalse(pickHighlight($quiet, defaults()));
+    testing.assertEqual(render($quiet, defaults()), render($quiet, plainOptions()));
+    def other as slides.Deck init slides.parse("# C\n\n```rust\nfn main() \{\}\n```\n\n" +
+        "```\nplain\n```\n");
+    testing.assertEqual(render($other, defaults()), render($other, plainOptions()));
+    testing.assertEqual(
+        documentFailure(slides.parse("---\nhighlight: 1\n---\n# C\n")),
+        "highlight");
+    testing.assertEqual(documentFailure($quiet), "");
+}
+
+/**
+ * A line too long for the panel is wrapped by the layout; both pieces are
+ * coloured, and the text drawn is still the line.
+ */
+func testWrappedLineIsColoured() {
+    def long as string init "io.printf(\"" + strings.repeat("word ", 40) + "\", $value);";
+    def deck as slides.Deck init slides.parse("# W\n\n```jennifer\n" + $long + "\n```\n");
+    def got as string init contentOf(document($deck, defaults()));
+    def s as theme.Syntax init theme.printSyntax(theme.theme("plain", "light"));
+    testing.assertContains($got, colourOp($s.builtin) + "\n(io) Tj");
+    testing.assertContains($got, colourOp($s.variable) + "\n($value) Tj");
+    testing.assertEqual(
+        pageCount($deck, defaults()),
+        pdf.getTotalPages(document($deck, plainOptions())));
+}
+
+/** Highlighting adds no page, so the overflow warning counts the same. */
+func testOverflowCountIsUnchanged() {
+    def body as string init "# Tall\n\n```sh\n";
+    for (def i as int init 0; $i < 60; $i = $i + 1) {
+        $body = $body + "echo \"line {$i}\" # and a comment\n";
+    }
+    def deck as slides.Deck init slides.parse($body + "```\n");
+    def coloured as int init pageCount($deck, defaults());
+    testing.assertTrue($coloured > 1);
+    testing.assertEqual($coloured, pdf.getTotalPages(document($deck, plainOptions())));
+    def got as string init contentOf(document($deck, defaults()));
+    testing.assertContains($got, "(\"line 59\") Tj");
+    testing.assertEqual(render($deck, defaults()), render($deck, defaults()));
+}
+
+/** The plan lists every block in document order, coloured or not. */
+func testPaintPlan() {
+    def tree as doctree.Node init markdown.parse(
+        "```js\nlet a;\n```\n\n- x\n\n  ```\n  b\n  ```\n\n```sh\necho →\n```\n");
+    testing.assertEqual(len(codeNodes($tree)), 3);
+    def s as theme.Syntax init theme.printSyntax(theme.theme("plain", "light"));
+    def plan as list of Painted init paintPlan($tree, $s, "?");
+    testing.assertEqual(len($plan), 3);
+    testing.assertTrue($plan[0].coloured);
+    testing.assertFalse($plan[1].coloured);
+    testing.assertTrue($plan[2].coloured);
+    # The arrow cannot be drawn; the layout prints "?", and so does the plan.
+    def last as PaintLine init $plan[2].lines[0];
+    testing.assertEqual(strings.join($last.chars, ""), "echo ?");
+    testing.assertEqual($last.colours[0], colourOp($s.builtin));
+    testing.assertEqual($last.colours[5], colourOp(""));
+}
+
+/** Lines split where the source breaks, one colour and slant per character. */
+func testPaintLines() {
+    def s as theme.Syntax init theme.printSyntax(theme.theme("plain", "light"));
+    def lines as list of PaintLine init paintLines("# a\n\nx = 1", "python", $s, "?");
+    testing.assertEqual(len($lines), 3);
+    testing.assertEqual(len($lines[1].chars), 0);
+    testing.assertTrue($lines[0].italic[0]);
+    testing.assertFalse($lines[2].italic[0]);
+    testing.assertEqual($lines[2].colours[4], colourOp($s.number));
+}
+
+/** A colour operator is the one `pdf` writes. */
+func testColourOp() {
+    testing.assertEqual(colourOp(""), "0 0 0 rg");
+    testing.assertEqual(colourOp("#ff0000"), "1 0 0 rg");
+    testing.assertEqual(colourOp("#000"), "0 0 0 rg");
+}
+
+/** A character is escaped the way `pdf` escapes text for a standard font. */
+func testPdfChar() {
+    testing.assertEqual(pdfChar("a"), "a");
+    testing.assertEqual(pdfChar("("), "\\(");
+    testing.assertEqual(pdfChar(")"), "\\)");
+    testing.assertEqual(pdfChar("\\"), "\\\\");
+    testing.assertEqual(pdfChar("é"), "\\351");
+    testing.assertEqual(pdfChar("\t"), "\\011");
+}
+
+/**
+ * A run that is not the expected text leaves the rest of its block as it was
+ * laid out; the panel still gets its real shade.
+ */
+func testPaintCodeMismatchStaysPlain() {
+    def lay as doctree.PdfOptions init doctree.pdfDefaults();
+    def real as doctree.Fill init doctree.rgb(240, 240, 240);
+    def mark as theme.Rgb init theme.hexRgb(CODE_MARK);
+    def pg as pdf.Page init pdf.color(pdf.page(200, 200), $mark.red, $mark.green, $mark.blue);
+    $pg = pdf.text($pg, 10, 100, "Courier", $lay.bodySize, "other text");
+    def doc as pdf.Document init pdf.addPage(pdf.document(), $pg);
+    def s as theme.Syntax init theme.printSyntax(theme.theme("plain", "light"));
+    def plan as Plan init Plan{blocks: paintPlan(markdown.parse("```js\nlet x;\n```\n"), $s, "?")};
+    def got as pdf.Document init paintCode($doc, $plan, $lay, $real);
+    testing.assertContains($got.pages[0].content, "(other text) Tj");
+    testing.assertFalse(strings.contains($got.pages[0].content, colourOp(CODE_MARK)));
+    testing.assertContains($got.pages[0].content, colourOp("#f0f0f0"));
+}
+
+/** The pen writes the mono font, its oblique face, and the real shade. */
+func testInk() {
+    def lay as doctree.PdfOptions init doctree.pdfDefaults();
+    $lay.bodySize = 13;
+    def pen as Ink init ink($lay, doctree.rgb(255, 0, 0));
+    testing.assertEqual($pen.fontLine, "/Courier 13 Tf");
+    testing.assertEqual($pen.slantLine, "/Courier-Oblique 13 Tf");
+    testing.assertEqual($pen.shade[0], "1 0 0 rg");
+    testing.assertEqual($pen.shade[1], "1 0 0 RG");
+    testing.assertEqual($pen.mark[0], colourOp(CODE_MARK));
+    testing.assertEqual($pen.black, "0 0 0 rg");
+    $lay.monoFont = "Times-Roman";
+    testing.assertEqual(ink($lay, doctree.noFill()).slantLine, "");
+}
+
+/** A run is matched against the line it continues, escapes included. */
+func testRunEnd() {
+    def s as theme.Syntax init theme.printSyntax(theme.theme("plain", "light"));
+    def pl as PaintLine init paintLines("f(a) b", "js", $s, "?")[0];
+    testing.assertEqual(runEnd($pl, 0, "f\\(a\\) b"), 6);
+    testing.assertEqual(runEnd($pl, 0, "f\\(a"), 3);
+    testing.assertEqual(runEnd($pl, 3, "\\) b"), 6);
+    testing.assertEqual(runEnd($pl, 0, "g"), -1);
+    testing.assertEqual(runEnd($pl, 0, ""), -1);
+    def empty as PaintLine init PaintLine{chars: [], colours: [], italic: []};
+    testing.assertEqual(runEnd($empty, 0, ""), 0);
+}
+
+/** A run is drawn one `Tj` per colour, and the colour is reset after it. */
+func testDrawRun() {
+    def s as theme.Syntax init theme.printSyntax(theme.theme("plain", "light"));
+    def lay as doctree.PdfOptions init doctree.pdfDefaults();
+    def pen as Ink init ink($lay, doctree.noFill());
+    def pl as PaintLine init paintLines("let x; // c", "js", $s, "?")[0];
+    def got as list of string init drawRun($pl, 0, len($pl.chars), $pen);
+    testing.assertEqual($got[0], colourOp($s.keyword));
+    testing.assertEqual($got[1], "(let) Tj");
+    testing.assertEqual($got[2], "0 0 0 rg");
+    testing.assertEqual($got[3], "( x; ) Tj");
+    testing.assertTrue(lists.contains($got, $pen.slantLine));
+    testing.assertTrue(lists.contains($got, "(// c) Tj"));
+    testing.assertEqual($got[len($got) - 1], "0 0 0 rg");
+    testing.assertEqual(drawRun($pl, 2, 2, $pen), ["() Tj"]);
+}
+
+/** A page is painted from where the previous one left off. */
+func testPaintPage() {
+    def s as theme.Syntax init theme.printSyntax(theme.theme("plain", "light"));
+    def lay as doctree.PdfOptions init doctree.pdfDefaults();
+    def pen as Ink init ink($lay, doctree.rgb(240, 240, 240));
+    def plan as Plan init Plan{
+        blocks: paintPlan(markdown.parse("```js\nlet a\nlet b\n```\n"), $s, "?")
+    };
+    def blank as pdf.Page init pdf.page(9, 9);
+    def run as string init pdf.text($blank, 1, 2, "Courier", $lay.bodySize, "let a").content;
+    def src as list of string init [$pen.mark[0], $pen.mark[1]];
+    for (def line in strings.split(strings.trimRight($run), "\n")) {
+        $src[] = $line;
+    }
+    def start as Cursor init Cursor{
+        next: 0,
+        active: false,
+        block: 0,
+        line: 0,
+        at: 0,
+        slanted: false
+    };
+    def got as PagePaint init paintPage($src, $plan, $pen, $start);
+    testing.assertEqual(
+        $got.lines[0],
+        "0.9411764705882353 0.9411764705882353 0.9411764705882353 rg");
+    testing.assertTrue(lists.contains($got.lines, "(let) Tj"));
+    testing.assertTrue($got.cursor.active);
+    testing.assertEqual($got.cursor.line, 1);
+    testing.assertEqual($got.cursor.next, 1);
+}
