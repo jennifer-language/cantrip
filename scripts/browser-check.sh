@@ -12,7 +12,9 @@
 # or a tap on the right or left third turns the slide, a pinch does not; and
 # the touch bar, shown only for a coarse pointer that cannot hover, whose
 # buttons open and close the overview and the notes and switch the mode, and
-# which fades out after a few seconds and comes back with a tap in the middle.
+# which fades out after a few seconds and comes back with a tap in the middle;
+# and Escape, which closes an overlay first and then goes back to the page the
+# slideshow was opened from.
 #
 # Skips (exit 0) when no Chromium is installed. Set JENNIFER and CHROMIUM to
 # pick the interpreter and the browser.
@@ -217,6 +219,40 @@ awk -v probe="$work/bar.js" '
     { print }
 ' "$work/deck.html" > "$work/bar.html"
 
+# The Escape probe: "<overview after Esc> <left?> <left after a second Esc>"
+# without a referrer, then the same with one. A headless file page has no real
+# referrer, so the probe sets one and records history.back instead of leaving.
+escprobe='<script>
+window.addEventListener("load", function () {
+    var ov = document.querySelector("body > #cantrip-overview");
+    var left = "stayed";
+    history.back = function () { left = "back"; };
+    function esc() { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); }
+    var r = [];
+    function round() {
+        left = "stayed";
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "o" }));
+        esc();
+        r.push(ov.hidden ? "closed" : "open");
+        r.push(left);
+        esc();
+        r.push(left);
+    }
+    round();
+    Object.defineProperty(document, "referrer", { get: function () { return "https://example.org/talks/?q=pdf"; } });
+    round();
+    var o = document.createElement("output");
+    o.id = "probe";
+    o.textContent = r.join(" ");
+    document.body.appendChild(o);
+});
+</script>'
+printf '%s\n' "$escprobe" > "$work/esc.js"
+awk -v probe="$work/esc.js" '
+    /<\/body>/ { while ((getline line < probe) > 0) print line }
+    { print }
+' "$work/deck.html" > "$work/esc.html"
+
 status=0
 check() {
     label="$1"
@@ -256,4 +292,7 @@ check "the touch bar works on a phone" 390,844 "file://$work/bar.html?notes=0" \
     "shown open closed open dark faded shown faded" "$phone"
 check "no touch bar with a mouse" 1280,800 "file://$work/bar.html?notes=0" \
     "hidden open closed open dark hidden hidden hidden"
+# history.length is above 1 in a headless tab that loaded the page, so back.
+check "Esc closes an overlay, then goes back only with a referrer" 1280,800 \
+    "file://$work/esc.html?notes=0" "closed stayed stayed closed stayed back"
 exit "$status"

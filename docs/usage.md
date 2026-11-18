@@ -144,7 +144,7 @@ Open the file. No server is needed, and nothing is fetched.
 | <kbd>m</kbd> | light / dark mode |
 | <kbd>f</kbd> | fullscreen |
 | <kbd>?</kbd> | the shortcut list |
-| <kbd>Esc</kbd> | close an overlay |
+| <kbd>Esc</kbd> | close an overlay; with none open, go back to the page that opened the slideshow (nothing when it was opened directly) |
 
 On a phone or tablet, swipe left or right to turn the slide, or tap the right
 or left third of the screen to go forward or back. A tap on a link follows the

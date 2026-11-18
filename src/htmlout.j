@@ -461,7 +461,7 @@ export func helpPanel() {
         '<tr><td><kbd>m</kbd></td><td>light / dark mode</td></tr>' +
         '<tr><td><kbd>f</kbd></td><td>fullscreen</td></tr>' +
         '<tr><td><kbd>?</kbd></td><td>this help</td></tr>' +
-        '<tr><td><kbd>esc</kbd></td><td>close an overlay</td></tr>' +
+        '<tr><td><kbd>esc</kbd></td><td>close an overlay, or go back</td></tr>' +
         '</table></div>';
 }
 
@@ -683,6 +683,16 @@ export func script() {
         help.hidden = true;
     }
 
+    // Escape with no overlay open leaves the slideshow for the page that
+    // opened it. Slides change the address with replaceState, so one step back
+    // is that page, with its own state (a search, a scroll position); a deck
+    // opened in a new tab goes to it instead. Opened directly, nothing happens.
+    function leave() {
+        var from = document.referrer;
+        if (!from || from.split("#")[0] === location.href.split("#")[0]) { return; }
+        if (history.length > 1) { history.back(); } else { location.href = from; }
+    }
+
     function toggle(el) {
         var wasHidden = el.hidden;
         close();
@@ -710,7 +720,9 @@ export func script() {
         else if (k === "m") { toggleMode(); }
         else if (k === "f") { toggleFullscreen(); }
         else if (k === "?") { toggle(help); }
-        else if (k === "Escape") { close(); }
+        else if (k === "Escape") {
+            if (overview.hidden && help.hidden) { leave(); } else { close(); }
+        }
     });
 
     overview.addEventListener("click", function (e) {
