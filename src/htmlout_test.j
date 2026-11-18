@@ -265,6 +265,20 @@ func testHelpPanel() {
     }
 }
 
+/** The touch bar has a button per key action, notes only with the panel. */
+func testTouchBar() {
+    def got as string init touchBar(true);
+    def js as string init script();
+    testing.assertContains($got, "id=\"cantrip-touchbar\"");
+    for (def act in ["overview", "notes", "mode", "fullscreen"]) {
+        testing.assertContains($got, "data-act=\"" + $act + "\"");
+        testing.assertContains($js, "act === \"" + $act + "\"");
+    }
+    testing.assertFalse(strings.contains(touchBar(false), "data-act=\"notes\""));
+    def page as string init render(slides.parse("# One"), defaults());
+    testing.assertContains($page, "id=\"cantrip-touchbar\"");
+}
+
 /** The document language comes from front matter, defaulting to English. */
 func testLanguage() {
     testing.assertEqual(language(slides.parse("---\nlang: de\n---\n# H")), "de");

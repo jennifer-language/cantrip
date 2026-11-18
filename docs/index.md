@@ -20,7 +20,7 @@ control.
 **The HTML** is one file. The stylesheet and the navigation script are inlined
 and nothing is fetched at view time, so a deck opens over `file://`, from a web
 root, or from a subdirectory, and works the same on a conference laptop with no
-network. It has keyboard navigation, a slide overview, a presenter-notes panel,
+network. It has keyboard and touch navigation, a slide overview, a presenter-notes panel,
 a progress bar, and a print stylesheet so the browser's own print dialog
 produces slides rather than a wall of text.
 

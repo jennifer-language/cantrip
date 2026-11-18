@@ -8,7 +8,10 @@
 # the front-matter default, ?notes=0 / ?notes=1, the #<slide> hash, the
 # narrow-window rule, the s key, the panel's height (as tall as the longest
 # notes, capped at 30% of the window, with the deck ending above it), and the
-# mode: ?mode= and the m key, which must repaint the slide.
+# mode: ?mode= and the m key, which must repaint the slide; and touch: a swipe
+# or a tap on the right or left third turns the slide, a pinch does not; and
+# the touch bar, shown only for a coarse pointer that cannot hover, whose
+# buttons open and close the overview and the notes and switch the mode.
 #
 # Skips (exit 0) when no Chromium is installed. Set JENNIFER and CHROMIUM to
 # pick the interpreter and the browser.
@@ -119,13 +122,88 @@ awk -v probe="$work/probe.js" '
     { print }
 ' "$work/long.html" > "$work/long-probe.html"
 
+# The touch probe: the slide after each gesture, starting on slide 2.
+touchprobe='<script>
+window.addEventListener("load", function () {
+    var d = document.querySelector("body > #cantrip-deck");
+    var all = Array.prototype.slice.call(d.querySelectorAll(":scope > .cantrip-slide"));
+    var w = window.innerWidth;
+    var y = window.innerHeight / 2;
+    function at() { return String(all.indexOf(d.querySelector(":scope > .cantrip-current")) + 1); }
+    function pt(id, x) {
+        return new Touch({ identifier: id, target: d, clientX: x, clientY: y });
+    }
+    function fire(type, touches, changed) {
+        d.dispatchEvent(new TouchEvent(type, {
+            bubbles: true, cancelable: true, touches: touches, changedTouches: changed
+        }));
+    }
+    function gesture(x0, x1) {
+        fire("touchstart", [pt(1, x0)], [pt(1, x0)]);
+        fire("touchend", [], [pt(1, x1)]);
+        return at();
+    }
+    var r = [];
+    r.push(gesture(w * 0.6, w * 0.3));
+    r.push(gesture(w * 0.3, w * 0.6));
+    r.push(gesture(w * 0.9, w * 0.9));
+    r.push(gesture(w * 0.1, w * 0.1));
+    r.push(gesture(w * 0.5, w * 0.5));
+    fire("touchstart", [pt(1, w * 0.6)], [pt(1, w * 0.6)]);
+    fire("touchstart", [pt(1, w * 0.6), pt(2, w * 0.4)], [pt(2, w * 0.4)]);
+    fire("touchend", [pt(2, w * 0.4)], [pt(1, w * 0.2)]);
+    fire("touchend", [], [pt(2, w * 0.1)]);
+    r.push(at());
+    var o = document.createElement("output");
+    o.id = "probe";
+    o.textContent = r.join(" ");
+    document.body.appendChild(o);
+});
+</script>'
+printf '%s\n' "$touchprobe" > "$work/touch.js"
+awk -v probe="$work/touch.js" '
+    /<\/body>/ { while ((getline line < probe) > 0) print line }
+    { print }
+' "$work/deck.html" > "$work/touch.html"
+
+# The bar probe: "<bar> <overview> <overview again> <notes> <mode>", each
+# after one press of the button for it.
+barprobe='<script>
+window.addEventListener("load", function () {
+    var b = document.querySelector("body > #cantrip-touchbar");
+    var ov = document.querySelector("body > #cantrip-overview");
+    var n = document.querySelector("body > #cantrip-notes");
+    function press(act) { b.querySelector("[data-act=" + act + "]").click(); }
+    var r = [getComputedStyle(b).display === "none" ? "hidden" : "shown"];
+    press("overview");
+    r.push(ov.hidden ? "closed" : "open");
+    press("overview");
+    r.push(ov.hidden ? "closed" : "open");
+    press("notes");
+    r.push(n.hidden ? "closed" : "open");
+    press("mode");
+    r.push(document.documentElement.dataset.mode);
+    var o = document.createElement("output");
+    o.id = "probe";
+    o.textContent = r.join(" ");
+    document.body.appendChild(o);
+});
+</script>'
+printf '%s\n' "$barprobe" > "$work/bar.js"
+awk -v probe="$work/bar.js" '
+    /<\/body>/ { while ((getline line < probe) > 0) print line }
+    { print }
+' "$work/deck.html" > "$work/bar.html"
+
 status=0
 check() {
     label="$1"
     size="$2"
     url="$3"
     want="$4"
-    got="$("$browser" --headless=new --no-sandbox --disable-gpu --user-data-dir="$work/profile" \
+    # A fifth argument passes extra browser flags, such as a phone's pointer.
+    extra="${5:-}"
+    got="$("$browser" --headless=new --no-sandbox --disable-gpu --user-data-dir="$work/profile" $extra \
         --window-size="$size" --virtual-time-budget=3000 --dump-dom "$url" 2>/dev/null |
         sed -n 's#.*<output id="probe">\([^<]*\)</output>.*#\1#p')"
     if [ "$got" = "$want" ]; then
@@ -148,4 +226,12 @@ check "?mode=dark opens in dark, m back to light" 1280,800 "$page?mode=dark" \
 check "?mode=sepia is ignored" 1280,800 "$page?mode=sepia" "open closed full 2 fitted none light dark"
 check "long notes stop at 30% of the window" 1280,800 "file://$work/long-probe.html" \
     "open closed full 1 capped none light dark"
+check "swipes and taps turn the slide, a pinch does not" 390,844 \
+    "file://$work/touch.html" "3 2 3 2 2 2"
+# primaryPointerType=2 is coarse, primaryHoverType=1 is none: a phone.
+phone="--blink-settings=primaryPointerType=2,primaryHoverType=1"
+check "the touch bar works on a phone" 390,844 "file://$work/bar.html?notes=0" \
+    "shown open closed open dark" "$phone"
+check "no touch bar with a mouse" 1280,800 "file://$work/bar.html?notes=0" \
+    "hidden open closed open dark"
 exit "$status"

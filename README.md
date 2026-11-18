@@ -45,7 +45,7 @@ Two artifacts out.
 ## The slideshow
 
 - one file, nothing fetched at view time
-- keyboard navigation, overview, presenter notes
+- keyboard and touch navigation, overview, presenter notes
 - opens over `file://` as readily as from a web root
 ```
 
@@ -53,7 +53,7 @@ Two artifacts out.
 
 **The HTML** is one file. The stylesheet and the navigation script are inlined
 and nothing is loaded from a network, so a deck works on a conference laptop
-with no connection. Keyboard navigation, a slide overview, a presenter-notes
+with no connection. Keyboard and touch navigation, a slide overview, a presenter-notes
 panel, a progress bar, slide transitions, the current slide in the URL fragment, and a print
 stylesheet so the browser's own print dialog produces slides.
 

@@ -1204,6 +1204,40 @@ body > #cantrip-help kbd {
     font-size: 15px;
 }
 
+/*
+ * The touch bar: keys for a device without a keyboard. Hidden unless the main
+ * pointer is coarse and cannot hover (a phone or tablet), so a laptop with a
+ * touch screen keeps the plain slide. It sits above the notes and the overview,
+ * so its buttons also close what they opened, and is always dark, like the
+ * help overlay.
+ */
+body > #cantrip-touchbar { display: none; }
+@media (hover: none) and (pointer: coarse) {
+    body > #cantrip-touchbar {
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        display: flex;
+        gap: 4px;
+        padding: 4px;
+        background: rgba(20, 22, 28, 0.72);
+        border-radius: 10px;
+        z-index: 16;
+    }
+}
+body > #cantrip-touchbar > button {
+    width: 40px;
+    height: 40px;
+    padding: 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #e6e8ee;
+    cursor: pointer;
+}
+body > #cantrip-touchbar > button:active { background: rgba(255, 255, 255, 0.16); }
+body > #cantrip-touchbar svg { display: block; width: 24px; height: 24px; }
+
 body > #cantrip-overview {
     position: fixed;
     inset: 0;
@@ -1252,6 +1286,7 @@ body > #cantrip-overview > .cantrip-thumb > .cantrip-thumb-t {
     body > #cantrip-progress,
     body > #cantrip-notes,
     body > #cantrip-help,
+    body > #cantrip-touchbar,
     body > #cantrip-overview {
         display: none !important;
     }

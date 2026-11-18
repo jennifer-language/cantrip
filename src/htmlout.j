@@ -466,6 +466,38 @@ export func helpPanel() {
 }
 
 /**
+ * The button bar for touch screens, which have no keys to press: overview,
+ * speaker notes (when the page has them), light / dark mode and fullscreen,
+ * each doing what its key does. The stylesheet shows it only on a device
+ * whose main pointer is coarse and cannot hover, and the script removes the
+ * fullscreen button where the browser has no fullscreen.
+ * @param withNotes {bool} whether the page carries the notes panel
+ * @return {string} the `<nav id="cantrip-touchbar">` element
+ */
+export func touchBar(withNotes as bool) {
+    def svg as string init '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+        'stroke-width="2" aria-hidden="true">';
+    def parts as list of string init [
+        '<nav id="cantrip-touchbar" aria-label="Slideshow controls">',
+        '<button type="button" data-act="overview" aria-label="Overview">' + $svg +
+            '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>' +
+            '<rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>' +
+            '</svg></button>'
+    ];
+    if ($withNotes) {
+        $parts[] = '<button type="button" data-act="notes" aria-label="Speaker notes">' + $svg +
+            '<path d="M4 6h16M4 12h16M4 18h10"/></svg></button>';
+    }
+    $parts[] = '<button type="button" data-act="mode" aria-label="Light or dark mode">' + $svg +
+        '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>' +
+        '</svg></button>';
+    $parts[] = '<button type="button" data-act="fullscreen" aria-label="Fullscreen">' + $svg +
+        '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg></button>';
+    $parts[] = "</nav>";
+    return strings.join($parts, "");
+}
+
+/**
  * Render a whole deck as one HTML document.
  *
  * The result is a complete, self-contained file; a caller writes it as-is.
@@ -498,6 +530,7 @@ export func render(deck as slides.Deck, opts as Options) {
         $parts[] = '<aside id="cantrip-notes" hidden aria-label="Speaker notes">' +
             "<h2>Speaker notes</h2><div id=\"cantrip-notes-body\"></div></aside>";
     }
+    $parts[] = touchBar($opts.notes);
     $parts[] = helpPanel();
     $parts[] = "<script>" + script() + "</script>";
     $parts[] = "</body></html>";
@@ -537,6 +570,7 @@ export func script() {
     var notesBody = notes ? notes.querySelector(":scope > #cantrip-notes-body") : null;
     var overview = part("overview");
     var help = part("help");
+    var bar = part("touchbar");
     var stageW = parseInt(deck.dataset.w, 10) || 1280;
     var stageH = parseInt(deck.dataset.h, 10) || 720;
     var at = 0;
@@ -637,6 +671,13 @@ export func script() {
         return isNaN(n) ? startSlide : n - 1;
     }
 
+    function toggleFullscreen() {
+        if (document.fullscreenElement) { document.exitFullscreen(); }
+        else if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen();
+        }
+    }
+
     function close() {
         overview.hidden = true;
         help.hidden = true;
@@ -667,12 +708,8 @@ export func script() {
         else if (k === "o") { toggle(overview); }
         else if (k === "s" && notes) { setNotes(notes.hidden); }
         else if (k === "m") { toggleMode(); }
-        else if (k === "f") {
-            if (document.fullscreenElement) { document.exitFullscreen(); }
-            else if (document.documentElement.requestFullscreen) {
-                document.documentElement.requestFullscreen();
-            }
-        } else if (k === "?") { toggle(help); }
+        else if (k === "f") { toggleFullscreen(); }
+        else if (k === "?") { toggle(help); }
         else if (k === "Escape") { close(); }
     });
 
@@ -694,6 +731,61 @@ export func script() {
         close();
         show(parseInt(hit.dataset.go, 10) - 1);
     });
+
+    // Touch, for a phone or tablet with no keyboard: a swipe left or right
+    // turns the slide, and a tap on the right or left third of the window goes
+    // forward or back. Touch events rather than pointer events, because the
+    // browser cancels a pointer once it treats the gesture as a pan. A swipe
+    // that starts in a code block that scrolls sideways scrolls it instead, a
+    // tap on a link follows the link, and a gesture with two fingers (a pinch)
+    // turns nothing. Mouse clicks are left alone, so text stays selectable.
+    var touch = null;
+    function scrollsSideways(el) {
+        for (; el && el !== deck; el = el.parentElement) {
+            if (el.scrollWidth > el.clientWidth + 1) { return true; }
+        }
+        return false;
+    }
+    deck.addEventListener("touchstart", function (e) {
+        if (e.touches.length !== 1) { touch = null; return; }
+        var t = e.touches[0];
+        touch = { x: t.clientX, y: t.clientY, scrolls: scrollsSideways(e.target) };
+    }, { passive: true });
+    deck.addEventListener("touchcancel", function () { touch = null; }, { passive: true });
+    deck.addEventListener("touchend", function (e) {
+        if (!touch || e.touches.length !== 0) { touch = null; return; }
+        var t = e.changedTouches[0];
+        var dx = t.clientX - touch.x;
+        var dy = t.clientY - touch.y;
+        var scrolls = touch.scrolls;
+        touch = null;
+        if (Math.abs(dx) > 40 && Math.abs(dx) > 1.5 * Math.abs(dy)) {
+            if (!scrolls) { show(dx < 0 ? at + 1 : at - 1); }
+            return;
+        }
+        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) { return; }
+        if (e.target.closest("a, button, summary, input, textarea, select")) { return; }
+        var box = deck.getBoundingClientRect();
+        var x = t.clientX - box.left;
+        if (x > box.width * 2 / 3) { show(at + 1); e.preventDefault(); }
+        else if (x < box.width / 3) { show(at - 1); e.preventDefault(); }
+    });
+
+    // The touch bar does what the keys do. A browser without fullscreen (the
+    // iPhone) gets no fullscreen button.
+    if (bar) {
+        var fs = bar.querySelector(":scope > [data-act=fullscreen]");
+        if (fs && !document.documentElement.requestFullscreen) { fs.remove(); }
+        bar.addEventListener("click", function (e) {
+            var b = e.target.closest("button[data-act]");
+            if (!b) { return; }
+            var act = b.dataset.act;
+            if (act === "overview") { toggle(overview); }
+            else if (act === "notes" && notes) { close(); setNotes(notes.hidden); }
+            else if (act === "mode") { toggleMode(); }
+            else if (act === "fullscreen") { toggleFullscreen(); }
+        });
+    }
 
     help.addEventListener("click", close);
     window.addEventListener("resize", function () { sizeNotes(); fit(); });

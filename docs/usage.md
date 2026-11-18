@@ -146,6 +146,17 @@ Open the file. No server is needed, and nothing is fetched.
 | <kbd>?</kbd> | the shortcut list |
 | <kbd>Esc</kbd> | close an overlay |
 
+On a phone or tablet, swipe left or right to turn the slide, or tap the right
+or left third of the screen to go forward or back. A tap on a link follows the
+link, a swipe in a code block that is wider than the slide scrolls the code,
+and pinching zooms without turning the slide.
+
+A bar of four buttons in the top-right corner stands in for the other keys:
+the overview, the speaker notes (left out when the page has none), light /
+dark mode, and fullscreen (left out where the browser has none, as on an
+iPhone). It appears only on a device whose main pointer is a finger, so a
+laptop, even one with a touch screen, shows the plain slide.
+
 The current slide is in the URL fragment (`talk.html#4`), so a reload keeps your
 place and you can link to a slide. `?notes=1` / `?notes=0` and `?overview=1` /
 `?overview=0` in the URL open or close the notes panel and the overview when
