@@ -20,8 +20,10 @@ use regex;
 
 import "html.j" as html;
 import "markdown.j" as markdown;
+import "doctree.j" as doctree;
 import "./slides.j" as slides;
 import "./theme.j" as theme;
+import "./highlight.j" as highlight;
 
 /** The generator name written into the document's meta tags. */
 export def const GENERATOR as string init "cantrip";
@@ -39,6 +41,8 @@ export def const DEFAULT_TRANSITION as string init "fade";
  * @field notes {bool} embed speaker notes for the presenter panel
  * @field numbers {bool} show the slide counter bottom-right
  * @field rawHtml {bool} pass raw HTML in the Markdown through unescaped
+ * @field highlight {bool} colour code blocks in a language `highlight` knows;
+ *     the deck's `highlight: false` turns it off too
  * @field transition {string} transition name, "" for the deck's own or the default
  * @field startNotes {string} notes panel at start, "open" or "closed"; "" for the deck's own
  * @field startSlide {string} the slide to open on, 1-based; "" for the deck's own
@@ -52,6 +56,7 @@ export def struct Options {
     notes as bool,
     numbers as bool,
     rawHtml as bool,
+    highlight as bool,
     transition as string,
     startNotes as string,
     startSlide as string,
@@ -73,7 +78,7 @@ export def struct Start {
 };
 
 /**
- * The default options: safe, numbered, with notes embedded.
+ * The default options: safe, numbered, highlighted, with notes embedded.
  * @return {Options} a fresh option set a caller can copy and adjust
  */
 export func defaults() {
@@ -85,6 +90,7 @@ export func defaults() {
         notes: true,
         numbers: true,
         rawHtml: false,
+        highlight: true,
         transition: "",
         startNotes: "",
         startSlide: "",
@@ -287,15 +293,133 @@ export func attrValue(value as string) {
 }
 
 /**
+ * Whether code blocks are highlighted: the caller's option, and the deck's
+ * `highlight:` front-matter key, which is checked even when the option is off.
+ * @param deck {slides.Deck} the deck being rendered
+ * @param opts {Options} the caller's options
+ * @return {bool} true when both allow it
+ * @throws {Error} kind "highlight" when the deck's value is not true or false
+ */
+export func pickHighlight(deck as slides.Deck, opts as Options) {
+    def wanted as bool init highlight.enabled(slides.metaOr($deck.meta, "highlight", ""));
+    return $opts.highlight and $wanted;
+}
+
+/**
  * Render one slide's Markdown body to HTML.
  * @param slide {slides.Slide} the slide to render
- * @param opts {Options} the caller's options, for `rawHtml`
+ * @param opts {Options} the caller's options, for `rawHtml` and `highlight`
  * @return {string} the slide's inner HTML
  */
 export func body(slide as slides.Slide, opts as Options) {
-    return keyCaps(markdown.toHtmlWith(
-        $slide.body,
-        markdown.HtmlOptions{allowRawHtml: $opts.rawHtml}));
+    if (not $opts.highlight) {
+        return keyCaps(markdown.toHtmlWith(
+            $slide.body,
+            markdown.HtmlOptions{allowRawHtml: $opts.rawHtml}));
+    }
+    return keyCaps(highlighted($slide.body, $opts.rawHtml));
+}
+
+/**
+ * One fenced code block lifted out of a slide for highlighting.
+ * @field lang {string} the fence's language tag
+ * @field text {string} the block's source
+ */
+export def struct CodeBlock {
+    lang as string,
+    text as string
+};
+
+/**
+ * A Markdown tree with its highlightable code blocks swapped for placeholders.
+ * @field node {doctree.Node} the tree, each such block's text a placeholder
+ * @field codes {list of CodeBlock} the blocks taken out, in document order
+ */
+export def struct Marked {
+    node as doctree.Node,
+    codes as list of CodeBlock
+};
+
+/**
+ * Render Markdown to HTML with every code block in a known language
+ * highlighted.
+ *
+ * Each such block's text is swapped for a placeholder made of letters and
+ * digits before the tree is rendered, and the placeholder is replaced by the
+ * highlighted HTML afterwards. The renderer's escaping is therefore never
+ * undone: the highlighter escapes the source itself, and raw HTML the deck
+ * writes elsewhere (with `--raw-html`) is never mistaken for a code block.
+ * @param md {string} the Markdown source
+ * @param rawHtml {bool} pass raw HTML in the Markdown through unescaped
+ * @return {string} the rendered HTML
+ */
+export func highlighted(md as string, rawHtml as bool) {
+    def prefix as string init placeholderPrefix($md);
+    def marked as Marked init markCode(markdown.parse($md), $prefix, 0);
+    # A zero value, as `markdown.toHtmlWith` builds it: a literal of another
+    # module's struct must name every field unless that module is installed.
+    def options as doctree.HtmlOptions;
+    $options.allowRawHtml = $rawHtml;
+    def out as string init doctree.renderHtml($marked.node, $options);
+    for (def k in 0..len($marked.codes)) {
+        def c as CodeBlock init $marked.codes[$k];
+        $out = strings.replace(
+            $out,
+            ">" + placeholder($prefix, $k) + "</code>",
+            ">" + highlight.toHtml($c.text, $c.lang) + "</code>");
+    }
+    return $out;
+}
+
+/**
+ * A placeholder stem that occurs nowhere in the source, so no text of the
+ * deck can be taken for a placeholder.
+ * @param md {string} the Markdown source
+ * @return {string} letters only
+ */
+export func placeholderPrefix(md as string) {
+    def prefix as string init "cantripcode";
+    while (strings.contains($md, $prefix)) {
+        $prefix = $prefix + "q";
+    }
+    return $prefix;
+}
+
+/**
+ * The placeholder for one code block. The index is closed off on both sides,
+ * so the first block's placeholder is not part of the eleventh's.
+ * @param prefix {string} the stem from `placeholderPrefix`
+ * @param index {int} the block's 0-based position
+ * @return {string} letters and digits only
+ */
+func placeholder(prefix as string, index as int) {
+    return $prefix + "x" + convert.toString($index) + "x";
+}
+
+/**
+ * Swap each highlightable code block below a node for its placeholder.
+ * @param node {doctree.Node} the subtree to walk
+ * @param prefix {string} the placeholder stem
+ * @param first {int} the index the first block found here takes
+ * @return {Marked} the rewritten subtree and the blocks taken out of it
+ */
+export func markCode(node as doctree.Node, prefix as string, first as int) {
+    def out as doctree.Node init $node;
+    def codes as list of CodeBlock init [];
+    if ($node.kind == "code" and highlight.handles($node.lang)) {
+        $codes[] = CodeBlock{lang: $node.lang, text: $node.text};
+        $out.text = placeholder($prefix, $first);
+    }
+    def kids as list of doctree.Node init [];
+    for (def child in $node.children) {
+        def m as Marked init markCode($child, $prefix, $first + len($codes));
+        $kids[] = $m.node;
+        for (def c in $m.codes) {
+            $codes[] = $c;
+        }
+    }
+    $out.children = $kids;
+    return Marked{node: $out, codes: $codes};
 }
 
 /**
@@ -468,9 +592,10 @@ export func helpPanel() {
 /**
  * The button bar for touch screens, which have no keys to press: overview,
  * speaker notes (when the page has them), light / dark mode and fullscreen,
- * each doing what its key does. The stylesheet shows it only on a device
- * whose main pointer is coarse and cannot hover, and the script removes the
- * fullscreen button where the browser has no fullscreen.
+ * each doing what its key does. The stylesheet shows it only once the script
+ * has seen a finger (at once on a device with a touch screen, otherwise at the
+ * first touch), and the script removes the fullscreen button where the browser
+ * has no fullscreen.
  * @param withNotes {bool} whether the page carries the notes panel
  * @return {string} the `<nav id="cantrip-touchbar">` element
  */
@@ -505,6 +630,7 @@ export func touchBar(withNotes as bool) {
  * @param opts {Options} how to render it
  * @return {string} the whole HTML document, ending in a newline
  * @throws {Error} kind "theme" when the theme or ratio name is unknown
+ * @throws {Error} kind "highlight" when the deck's `highlight:` is not true or false
  */
 export func render(deck as slides.Deck, opts as Options) {
     def name as string init themeName($deck, $opts);
@@ -513,6 +639,8 @@ export func render(deck as slides.Deck, opts as Options) {
     def motion as string init pickTransition($deck, $opts);
     def start as Start init pickStart($deck, $opts);
     def total as int init len($deck.slides);
+    def options as Options init $opts;
+    $options.highlight = pickHighlight($deck, $opts);
     def parts as list of string init [];
     $parts[] = "<!doctype html>";
     $parts[] = "<html lang=\"" + attrValue(language($deck)) + "\" data-mode=\"" + $mode + "\">";
@@ -522,7 +650,7 @@ export func render(deck as slides.Deck, opts as Options) {
         convert.toString($s.height) + "\" data-transition=\"" + $motion + "\"" +
         startAttributes($start) + ">";
     for (def slide in $deck.slides) {
-        $parts[] = section($slide, $total, $opts);
+        $parts[] = section($slide, $total, $options);
     }
     $parts[] = "</main>";
     $parts[] = overview($deck);
@@ -751,6 +879,7 @@ export func script() {
     var barTimer = 0;
     function showBar(on) {
         if (!bar) { return; }
+        on = on && bar.classList.contains("cantrip-touch");
         window.clearTimeout(barTimer);
         bar.classList.toggle("cantrip-shown", on);
         if (on) { barTimer = window.setTimeout(fadeBar, 3000); }
@@ -800,6 +929,16 @@ export func script() {
         else if (x < box.width / 3) { show(at - 1); e.preventDefault(); }
         else if (bar) { showBar(!bar.classList.contains("cantrip-shown")); e.preventDefault(); }
     });
+
+    // The touch bar is for fingers. Any device with a touch screen gets it
+    // from the start, including one whose main pointer is a touchpad or a
+    // mouse (a ChromeOS tablet, a touch laptop); where the browser reports no
+    // finger at all, the first touch brings it in.
+    function useTouch() { if (bar) { bar.classList.add("cantrip-touch"); } }
+    if (window.matchMedia && window.matchMedia("(pointer: coarse), (any-pointer: coarse)").matches) {
+        useTouch();
+    }
+    document.addEventListener("touchstart", useTouch, { passive: true, once: true });
 
     // The touch bar does what the keys do. A browser without fullscreen (the
     // iPhone) gets no fullscreen button.

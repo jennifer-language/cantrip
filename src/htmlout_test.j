@@ -275,6 +275,7 @@ func testTouchBar() {
         testing.assertContains($js, "act === \"" + $act + "\"");
     }
     testing.assertFalse(strings.contains(touchBar(false), "data-act=\"notes\""));
+    testing.assertContains($js, 'addEventListener("touchstart", useTouch');
     def page as string init render(slides.parse("# One"), defaults());
     testing.assertContains($page, "id=\"cantrip-touchbar\"");
 }
@@ -397,6 +398,12 @@ func testKeyCapsLeavesCode() {
     def src as string init "Write `<kbd>x</kbd>`.\n\n```html\n<kbd>y</kbd>\n```\n\n<kbd>z</kbd>";
     def got as string init body(slides.parse($src).slides[0], defaults());
     testing.assertContains($got, "<code>&lt;kbd&gt;x&lt;/kbd&gt;</code>");
+    testing.assertContains($got, '&lt;<span class="hljs-name">kbd</span>&gt;y&lt;/');
+    testing.assertFalse(strings.contains($got, "<kbd>y"));
+    testing.assertContains($got, "<kbd>z</kbd>");
+    def plain as Options init defaults();
+    $plain.highlight = false;
+    $got = body(slides.parse($src).slides[0], $plain);
     testing.assertContains($got, "&lt;kbd&gt;y&lt;/kbd&gt;");
     testing.assertContains($got, "<kbd>z</kbd>");
     testing.assertEqual(keyCaps("<p>plain</p>"), "<p>plain</p>");
@@ -611,4 +618,122 @@ func testThemeNameAndPickMode() {
     $opts.mode = " Light ";
     testing.assertEqual(themeName(fixture(), $opts), "ivy");
     testing.assertEqual(pickMode(fixture(), $opts), "light");
+}
+
+/**
+ * Render a deck's slides with the default options and report how it failed.
+ * @param deck {slides.Deck} the deck to render
+ * @return {string} the Error kind it threw, "" when it did not throw
+ */
+func renderFailure(deck as slides.Deck) {
+    try {
+        render($deck, defaults());
+    } catch (e) {
+        return $e.kind;
+    }
+    return "";
+}
+
+/** A code block in a known language comes out in highlight.js spans. */
+func testBodyHighlightsCode() {
+    def md as string init "# C\n\n```jennifer\ndef x as int init 1;\n```\n";
+    def slide as slides.Slide init slides.parse($md).slides[0];
+    def got as string init body($slide, defaults());
+    testing.assertContains(
+        $got,
+        '<pre><code class="language-jennifer"><span class="hljs-keyword">def</span> x');
+    testing.assertContains($got, '<span class="hljs-number">1</span>;</code></pre>');
+}
+
+/** A block in no language, or one the highlighter lacks, renders as before. */
+func testBodyLeavesUnknownCodePlain() {
+    def md as string init "```\nlet x = 1;\n```\n\n```rust\nfn main() \{\}\n```\n\nText `code`.";
+    def slide as slides.Slide init slides.parse($md).slides[0];
+    def plain as Options init defaults();
+    $plain.highlight = false;
+    testing.assertEqual(body($slide, defaults()), body($slide, $plain));
+    testing.assertFalse(strings.contains(body($slide, defaults()), "hljs-"));
+}
+
+/**
+ * Code that holds markup stays text: the highlighter escapes it, so neither a
+ * `</code>` nor a `<script>` in a block can end the block or run.
+ */
+func testHighlightingKeepsCodeEscaped() {
+    def md as string init "```html\n</code></pre><script>alert(1)</script> & x\n```\n\n" +
+        "```js\nconst s = \"</code><script>\" + a && b;\n```\n\n" +
+        "```jennifer\n# </code> & <b>\n```\n";
+    def got as string init body(slides.parse($md).slides[0], defaults());
+    testing.assertFalse(strings.contains($got, "<script"));
+    testing.assertFalse(strings.contains($got, "<b>"));
+    testing.assertEqual(len(strings.split($got, "</code>")), 4);
+    testing.assertEqual(len(strings.split($got, "</pre>")), 4);
+    testing.assertContains($got, "&amp; x");
+    testing.assertContains($got, "&amp;&amp;");
+    testing.assertContains(
+        $got,
+        '<span class="hljs-comment"># &lt;/code&gt; &amp; &lt;b&gt;</span>');
+}
+
+/** Raw HTML that looks like a code block is passed through, not highlighted. */
+func testHighlightingLeavesRawHtml() {
+    def raw as string init '<pre><code class="language-js">const <b>x</b> = 1;</code></pre>';
+    def opts as Options init defaults();
+    $opts.rawHtml = true;
+    testing.assertContains(body(slides.parse($raw).slides[0], $opts), $raw);
+}
+
+/** Text that happens to look like a placeholder is left alone. */
+func testPlaceholders() {
+    testing.assertEqual(placeholderPrefix("no clash"), "cantripcode");
+    testing.assertEqual(placeholderPrefix("a cantripcode b"), "cantripcodeq");
+    testing.assertEqual(placeholderPrefix("cantripcode cantripcodeq"), "cantripcodeqq");
+    def md as string init "```js\nconst a = 1;\n```\n\ncantripcodex0x\n\n" +
+        "```js\ncantripcodex0x\n```\n";
+    def got as string init highlighted($md, false);
+    testing.assertContains($got, "<p>cantripcodex0x</p>");
+    testing.assertContains($got, '<code class="language-js">cantripcodex0x</code>');
+    testing.assertContains($got, '<span class="hljs-keyword">const</span>');
+}
+
+/** Every highlightable block below a node is swapped for its own placeholder. */
+func testMarkCode() {
+    def md as string init "```js\na\n```\n\n- item\n\n  ```sh\n  b\n  ```\n\n```\nc\n```\n";
+    def m as Marked init markCode(markdown.parse($md), "p", 0);
+    testing.assertEqual(len($m.codes), 2);
+    testing.assertEqual($m.codes[0].lang, "js");
+    testing.assertEqual($m.codes[1].text, "b");
+    def out as string init doctree.renderHtml(
+        $m.node,
+        doctree.HtmlOptions{allowRawHtml: false, xhtml: false});
+    testing.assertContains($out, ">px0x</code>");
+    testing.assertContains($out, ">px1x</code>");
+    testing.assertContains($out, ">c</code>");
+}
+
+/** `highlight: false` in the front matter turns it off; any other value fails. */
+func testPickHighlight() {
+    def deck as slides.Deck init slides.parse("# C\n\n```js\nlet x;\n```\n");
+    testing.assertTrue(pickHighlight($deck, defaults()));
+    def off as Options init defaults();
+    $off.highlight = false;
+    testing.assertFalse(pickHighlight($deck, $off));
+    def quiet as slides.Deck init slides.parse("---\nhighlight: false\n---\n" +
+        "# C\n\n```js\nlet x;\n```\n");
+    testing.assertFalse(pickHighlight($quiet, defaults()));
+    def got as string init render($quiet, defaults());
+    testing.assertFalse(strings.contains($got, '<span class="hljs-'));
+    testing.assertContains($got, '<code class="language-js">let x;</code>');
+    testing.assertContains(render($deck, defaults()), '<span class="hljs-keyword">let</span>');
+    def bad as slides.Deck init slides.parse("---\nhighlight: no\n---\n# C\n");
+    testing.assertEqual(renderFailure($bad), "highlight");
+    testing.assertEqual(renderFailure($quiet), "");
+}
+
+/** Speaker notes keep their code plain: the notes panel has its own colours. */
+func testNotesStayPlain() {
+    def deck as slides.Deck init slides.parse("# C\n\n<!-- notes:\n```js\nlet x;\n```\n-->\n");
+    def got as string init section($deck.slides[0], 1, defaults());
+    testing.assertContains($got, "cantrip-slide-notes");
+    testing.assertFalse(strings.contains($got, "hljs-"));
 }
