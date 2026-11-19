@@ -49,8 +49,9 @@ heading at all, which is usually a separator in the wrong place.
 the audience to take home or write on. Each slide keeps its own text and
 pictures, scaled down, with a thin frame and its number under it; where the
 slide leaves room on the right, light ruled lines give space for notes. The
-footer carries the deck's title and the page numbers, whatever `--no-numbers`
-says. The PDF flags apply as for `pdf`: `--notes` puts the speaker notes on
+deck's title heads every page, above its first slide. The footer carries the
+`--footer` text, if you give one (a URL to the slides, say), and the page
+numbers, whatever `--no-numbers` says. The PDF flags apply as for `pdf`: `--notes` puts the speaker notes on
 the slides, `--theme` and `--ratio` change the slides themselves. A slide that
 overflows its page in `pdf` overflows in the handout too, and gets the same
 warning.
@@ -159,7 +160,7 @@ Open the file. No server is needed, and nothing is fetched.
 | <kbd>m</kbd> | light / dark mode |
 | <kbd>f</kbd> | fullscreen |
 | <kbd>?</kbd> | the shortcut list |
-| <kbd>Esc</kbd> | close an overlay; with none open, go back to the page that opened the slideshow (nothing when it was opened directly) |
+| <kbd>Esc</kbd> | close an overlay; with none open, end the presentation: leave fullscreen and go back to the page that opened the slideshow (nothing when it was opened directly). In fullscreen it works the same: Chrome and Edge let the slideshow claim the key (hold it to only leave fullscreen), Firefox and Safari leave fullscreen first and the slideshow then goes back |
 
 On a phone or tablet, swipe left or right to turn the slide, or tap the right
 or left third of the screen to go forward or back. A tap on a link follows the

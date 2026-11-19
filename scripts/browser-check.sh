@@ -248,6 +248,41 @@ window.addEventListener("load", function () {
 });
 </script>'
 printf '%s\n' "$escprobe" > "$work/esc.js"
+
+# The fullscreen probe: a headless browser has no real fullscreen, so the probe
+# sends the fullscreenchange a browser sends when it leaves fullscreen on Esc by
+# itself (Firefox, Safari). "<overview after it> <left?>" with the overview
+# open, then "<left?>" with none open, then how often the page went back after
+# an Esc key AND a fullscreenchange for the same press (a browser that delivers
+# both must not go back twice).
+fsprobe='<script>
+window.addEventListener("load", function () {
+    var ov = document.querySelector("body > #cantrip-overview");
+    var backs = 0;
+    history.back = function () { backs = backs + 1; };
+    Object.defineProperty(document, "referrer", { get: function () { return "https://example.org/talks/"; } });
+    function fsExit() { document.dispatchEvent(new Event("fullscreenchange")); }
+    var r = [];
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "o" }));
+    fsExit();
+    r.push(ov.hidden ? "closed" : "open");
+    r.push(backs > 0 ? "back" : "stayed");
+    fsExit();
+    r.push(backs > 0 ? "back" : "stayed");
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    fsExit();
+    r.push(String(backs));
+    var o = document.createElement("output");
+    o.id = "probe";
+    o.textContent = r.join(" ");
+    document.body.appendChild(o);
+});
+</script>'
+printf '%s\n' "$fsprobe" > "$work/fs.js"
+awk -v probe="$work/fs.js" '
+    /<\/body>/ { while ((getline line < probe) > 0) print line }
+    { print }
+' "$work/deck.html" > "$work/fs.html"
 awk -v probe="$work/esc.js" '
     /<\/body>/ { while ((getline line < probe) > 0) print line }
     { print }
@@ -302,4 +337,6 @@ check "with a mouse the bar waits for a touch" 1280,800 "file://$work/bar.html?n
 # history.length is above 1 in a headless tab that loaded the page, so back.
 check "Esc closes an overlay, then goes back only with a referrer" 1280,800 \
     "file://$work/esc.html?notes=0" "closed stayed stayed closed stayed back"
+check "Esc in fullscreen ends the presentation, once" 1280,800 \
+    "file://$work/fs.html?notes=0" "closed stayed back 1"
 exit "$status"

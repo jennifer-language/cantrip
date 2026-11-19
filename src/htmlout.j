@@ -799,10 +799,27 @@ export func script() {
         return isNaN(n) ? startSlide : n - 1;
     }
 
+    // Fullscreen is how a deck is presented, and there the browser keeps Esc
+    // for itself. Where it lets a page claim the key (the Keyboard Lock API,
+    // in Chromium) the slideshow does, so Esc behaves as it does in a window; a
+    // long press still leaves fullscreen. ownExit tells a fullscreen exit the
+    // slideshow asked for (f, the touch bar) from one the browser made on its
+    // own, which is Esc where the key cannot be claimed.
+    var ownExit = false;
+    function lockEscape() {
+        if (navigator.keyboard && navigator.keyboard.lock) {
+            navigator.keyboard.lock(["Escape"]).catch(function () {});
+        }
+    }
+    function exitFullscreen() {
+        ownExit = true;
+        document.exitFullscreen();
+    }
     function toggleFullscreen() {
-        if (document.fullscreenElement) { document.exitFullscreen(); }
+        if (document.fullscreenElement) { exitFullscreen(); }
         else if (document.documentElement.requestFullscreen) {
-            document.documentElement.requestFullscreen();
+            var p = document.documentElement.requestFullscreen();
+            if (p && p.then) { p.then(lockEscape, function () {}); }
         }
     }
 
@@ -815,11 +832,29 @@ export func script() {
     // opened it. Slides change the address with replaceState, so one step back
     // is that page, with its own state (a search, a scroll position); a deck
     // opened in a new tab goes to it instead. Opened directly, nothing happens.
+    var leaving = false;
     function leave() {
         var from = document.referrer;
-        if (!from || from.split("#")[0] === location.href.split("#")[0]) { return; }
+        if (leaving || !from || from.split("#")[0] === location.href.split("#")[0]) { return; }
+        leaving = true;
         if (history.length > 1) { history.back(); } else { location.href = from; }
     }
+
+    // Esc, in a window or in fullscreen: close an open overlay, else end the
+    // presentation (leave fullscreen and go back).
+    function escape() {
+        if (!overview.hidden || !help.hidden) { close(); return; }
+        if (document.fullscreenElement) { exitFullscreen(); }
+        leave();
+    }
+
+    // Fullscreen ended without the slideshow asking: the browser took Esc.
+    document.addEventListener("fullscreenchange", function () {
+        if (document.fullscreenElement) { ownExit = false; return; }
+        if (navigator.keyboard && navigator.keyboard.unlock) { navigator.keyboard.unlock(); }
+        if (ownExit) { ownExit = false; return; }
+        escape();
+    });
 
     function toggle(el) {
         var wasHidden = el.hidden;
@@ -848,9 +883,7 @@ export func script() {
         else if (k === "m") { toggleMode(); }
         else if (k === "f") { toggleFullscreen(); }
         else if (k === "?") { toggle(help); }
-        else if (k === "Escape") {
-            if (overview.hidden && help.hidden) { leave(); } else { close(); }
-        }
+        else if (k === "Escape") { escape(); }
     });
 
     overview.addEventListener("click", function (e) {
