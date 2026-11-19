@@ -327,23 +327,38 @@ export def const HANDOUT_NOTES_MIN as int init 80;
 /** Distance between two note lines, in points. */
 export def const HANDOUT_LINE_STEP as int init 20;
 
+/** Room at the top of a handout page for the deck's title, in points. */
+export def const HANDOUT_TITLE_SPACE as int init 22;
+
+/** The handout title's font size, in points. */
+export def const HANDOUT_TITLE_SIZE as int init 11;
+
 /**
  * A handout: the slide pages, three to an A4 portrait page.
  *
  * Each slide keeps its own content stream, wrapped in one scaling transform
  * and clipped to the slide, so text stays text and pictures stay sharp. A thin
  * frame marks each slide, its number sits under it, and where the slide leaves
- * room on the right, ruled lines give space for notes. Links and bookmarks
- * move with their slides.
+ * room on the right, ruled lines give space for notes. The deck's title heads
+ * every page, above its first slide. Links and bookmarks move with their slides.
  * @param doc {pdf.Document} the slide document from `document`
  * @param s {theme.Stage} the stage the slides were printed at
+ * @param title {string} the title over each page's first slide, "" for none
  * @param label {pdf.PageLabel} the handout's running footer
  * @return {pdf.Document} the handout document
  */
-export func handout(doc as pdf.Document, s as theme.Stage, label as pdf.PageLabel) {
+export func handout(
+    doc as pdf.Document,
+    s as theme.Stage,
+    title as string,
+    label as pdf.PageLabel) {
     def top as int init HANDOUT_HEIGHT - HANDOUT_MARGIN;
+    def heading as string init fitTitle(pdf.toWinAnsi(strings.trim($title), "?"));
+    if ($heading != "") {
+        $top = $top - HANDOUT_TITLE_SPACE;
+    }
     def usableW as int init HANDOUT_WIDTH - 2 * HANDOUT_MARGIN;
-    def scale as float init slotHeight() / convert.toFloat($s.pageHeight);
+    def scale as float init slotHeight($top) / convert.toFloat($s.pageHeight);
     if (convert.toFloat($s.pageWidth) * $scale > convert.toFloat($usableW)) {
         $scale = convert.toFloat($usableW) / convert.toFloat($s.pageWidth);
     }
@@ -402,6 +417,16 @@ export func handout(doc as pdf.Document, s as theme.Stage, label as pdf.PageLabe
         $sheet.fonts = $fonts;
         $sheet.glyphUses = $glyphs;
         $sheet.annots = $links;
+        if ($heading != "") {
+            $sheet = pdf.color($sheet, 40, 40, 40);
+            $sheet = pdf.text(
+                $sheet,
+                HANDOUT_MARGIN,
+                HANDOUT_HEIGHT - HANDOUT_MARGIN - HANDOUT_TITLE_SIZE,
+                "Helvetica-Bold",
+                HANDOUT_TITLE_SIZE,
+                $heading);
+        }
         $sheet = pdf.color($sheet, 110, 110, 110);
         for (def k in 0..$count) {
             def y as float init slotY($k, $h, $top);
@@ -433,18 +458,18 @@ export func handout(doc as pdf.Document, s as theme.Stage, label as pdf.PageLabe
     return $out;
 }
 
-# slotHeight is the height one slide may take on a handout page.
-func slotHeight() {
-    def free as int init HANDOUT_HEIGHT -
-        2 * HANDOUT_MARGIN - HANDOUT_GAP -
+# slotHeight is the height one slide may take on a handout page whose slides
+# start at `top`.
+func slotHeight(top as int) {
+    def free as int init $top - HANDOUT_MARGIN - HANDOUT_GAP -
         (HANDOUT_PER_PAGE - 1) * HANDOUT_GAP;
     return convert.toFloat($free) / convert.toFloat(HANDOUT_PER_PAGE);
 }
 
 # slotY is the bottom edge of the k-th slide on a handout page whose slides are
-# h points high.
+# h points high and start at `top`.
 func slotY(k as int, h as float, top as int) {
-    def step as float init slotHeight() + convert.toFloat(HANDOUT_GAP);
+    def step as float init slotHeight($top) + convert.toFloat(HANDOUT_GAP);
     return convert.toFloat($top) - convert.toFloat($k) * $step - $h;
 }
 
@@ -467,6 +492,21 @@ func noteLines(notesX as float, y as float, h as float) {
     return $out + "Q\n";
 }
 
+# fitTitle shortens a title that would not fit the page width, ending it in
+# "...".
+func fitTitle(title as string) {
+    def room as int init HANDOUT_WIDTH - 2 * HANDOUT_MARGIN;
+    if ($title == "" or pdf.measureText("Helvetica-Bold", HANDOUT_TITLE_SIZE, $title) <= $room) {
+        return $title;
+    }
+    def cut as string init $title;
+    while (len($cut) > 1 and
+        pdf.measureText("Helvetica-Bold", HANDOUT_TITLE_SIZE, $cut + "...") > $room) {
+        $cut = strings.trim($cut[..len($cut) - 1]);
+    }
+    return $cut + "...";
+}
+
 # num writes a non-negative coordinate with at most three decimals, the way a
 # content stream takes it.
 func num(v as float) {
@@ -487,14 +527,25 @@ func num(v as float) {
 }
 
 /**
- * The handout's footer: the deck's label on the left and page numbers on the
- * right, always, since a printed handout needs both to be put back in order.
+ * The handout's title: the deck's own, printed above each page's first slide.
+ * @param deck {slides.Deck} the deck being rendered
+ * @return {string} the title, "" when the deck has none
+ */
+export func handoutTitle(deck as slides.Deck) {
+    return strings.trim($deck.title);
+}
+
+/**
+ * The handout's footer: the caller's `--footer` text on the left (the title
+ * already heads the page), and page numbers on the right, always, since a
+ * printed handout needs them to be put back in order.
  * @param deck {slides.Deck} the deck being rendered
  * @param opts {Options} the caller's options
  * @return {pdf.PageLabel} the footer for every handout page
  */
 export func handoutFooter(deck as slides.Deck, opts as Options) {
     def out as pdf.PageLabel init footer($deck, $opts);
+    $out.left = pdf.toWinAnsi(strings.trim($opts.footer), "?");
     $out.right = "%page% / %pages%";
     $out.size = 8;
     $out.red = 110;

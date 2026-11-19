@@ -29,7 +29,7 @@ import "./htmlout.j" as htmlout;
 import "./pdfout.j" as pdfout;
 
 /** The application version, and the version `--version` reports. */
-export def const VERSION as string init "0.5.0";
+export def const VERSION as string init "0.5.1";
 
 /** The command name, as installed on PATH. */
 export def const PROGRAM as string init "cantrip";
@@ -559,6 +559,7 @@ export func writeHandout(
     def doc as pdf.Document init pdfout.handout(
         $slidesDoc,
         pdfout.pickStage($deck, $opts),
+        pdfout.handoutTitle($deck),
         pdfout.handoutFooter($deck, $opts));
     def out as bytes init pdf.render($doc);
     fs.writeBytes($target, $out);

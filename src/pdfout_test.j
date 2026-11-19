@@ -240,7 +240,7 @@ func slidePages(n as int) {
 
 /** Three slides fit on an A4 portrait page; a fourth starts the next page. */
 func testHandoutPutsThreeSlidesOnA4() {
-    def got as pdf.Document init handout(slidePages(4), theme.stage("16:9"), pdf.pageLabel());
+    def got as pdf.Document init handout(slidePages(4), theme.stage("16:9"), "", pdf.pageLabel());
     testing.assertEqual(len($got.pages), (4 + HANDOUT_PER_PAGE - 1) // HANDOUT_PER_PAGE);
     def first as pdf.Page init $got.pages[0];
     testing.assertEqual($first.width, HANDOUT_WIDTH);
@@ -256,7 +256,7 @@ func testHandoutPutsThreeSlidesOnA4() {
 
 /** A slide keeps its proportions, fits the margins, and leaves room for notes. */
 func testHandoutScalesInsideTheMargins() {
-    def got as pdf.Document init handout(slidePages(1), theme.stage("16:9"), pdf.pageLabel());
+    def got as pdf.Document init handout(slidePages(1), theme.stage("16:9"), "", pdf.pageLabel());
     def a as pdf.LinkAnnot init $got.pages[0].annots[0];
     # the link sat at 100,200 (300 x 40) on a 960 x 540 slide; scaled, it keeps
     # its 7.5:1 shape and lies inside the slide's part of the page
@@ -266,7 +266,7 @@ func testHandoutScalesInsideTheMargins() {
     testing.assertContains($got.pages[0].content, " l S\n");
     # note lines are HANDOUT_LINE_STEP apart, and slides HANDOUT_GAP apart
     testing.assertTrue(HANDOUT_LINE_STEP > 0 and HANDOUT_GAP > 0);
-    def two as pdf.Document init handout(slidePages(2), theme.stage("16:9"), pdf.pageLabel());
+    def two as pdf.Document init handout(slidePages(2), theme.stage("16:9"), "", pdf.pageLabel());
     def upper as int init $two.pages[0].annots[0].y;
     def lower as int init $two.pages[0].annots[1].y;
     testing.assertTrue($upper - $lower > HANDOUT_GAP);
@@ -274,7 +274,7 @@ func testHandoutScalesInsideTheMargins() {
 
 /** Bookmarks follow their slides onto the handout pages. */
 func testHandoutMovesBookmarks() {
-    def got as pdf.Document init handout(slidePages(5), theme.stage("4:3"), pdf.pageLabel());
+    def got as pdf.Document init handout(slidePages(5), theme.stage("4:3"), "", pdf.pageLabel());
     testing.assertEqual(len($got.outline), 5);
     testing.assertEqual($got.outline[0].page, 0);
     testing.assertEqual($got.outline[2].page, 0);
@@ -283,13 +283,42 @@ func testHandoutMovesBookmarks() {
     testing.assertTrue($got.outline[1].y > $got.outline[2].y);
 }
 
-/** The handout footer always numbers its pages, even when slides do not. */
+/** The handout footer carries the --footer text and always numbers its pages. */
 func testHandoutFooterNumbersPages() {
     def opts as Options init defaults();
     $opts.numbers = false;
-    def label as pdf.PageLabel init handoutFooter(fixture(), $opts);
-    testing.assertEqual($label.left, "Deck T");
-    testing.assertEqual($label.right, "%page% / %pages%");
+    def plain as pdf.PageLabel init handoutFooter(fixture(), $opts);
+    testing.assertEqual($plain.left, "");
+    testing.assertEqual($plain.right, "%page% / %pages%");
+    $opts.footer = "Jennifer Academy, https://academy.jennifer-lang.dev/";
+    testing.assertEqual(handoutFooter(fixture(), $opts).left, $opts.footer);
+    testing.assertEqual(handoutTitle(fixture()), "Deck T");
+}
+
+/** The title heads every page, and the slides move down to make room for it. */
+func testHandoutTitleOnEveryPage() {
+    def bare as pdf.Document init handout(slidePages(4), theme.stage("16:9"), "", pdf.pageLabel());
+    def titled as pdf.Document init handout(
+        slidePages(4),
+        theme.stage("16:9"),
+        "Deck T",
+        pdf.pageLabel());
+    testing.assertContains($titled.pages[0].content, "(Deck T) Tj");
+    testing.assertContains($titled.pages[1].content, "(Deck T) Tj");
+    testing.assertFalse(strings.contains($bare.pages[0].content, "Deck T"));
+    testing.assertTrue($titled.pages[0].annots[0].y < $bare.pages[0].annots[0].y);
+    # the slides move down by the room the title takes, scaled into the slot
+    testing.assertTrue(HANDOUT_TITLE_SPACE > HANDOUT_TITLE_SIZE);
+    testing.assertContains(
+        $titled.pages[0].content,
+        "/Helvetica-Bold " + convert.toString(HANDOUT_TITLE_SIZE) + " Tf");
+    def long as string init strings.repeat("A very long title ", 12);
+    def cut as pdf.Document init handout(
+        slidePages(1),
+        theme.stage("16:9"),
+        $long,
+        pdf.pageLabel());
+    testing.assertContains($cut.pages[0].content, "...) Tj");
 }
 
 /** Coordinates are written with at most three decimals. */
