@@ -29,6 +29,7 @@ use maps;
 use convert;
 use encoding;
 use lists;
+use math;
 
 import "markdown.j" as markdown;
 import "doctree.j" as doctree;
@@ -302,6 +303,203 @@ export func magnify(doc as pdf.Document, s as theme.Stage) {
     def out as pdf.Document init $doc;
     $out.pages = $pages;
     $out.outline = $marks;
+    return $out;
+}
+
+/** Handout page width: A4 portrait, in points. */
+export def const HANDOUT_WIDTH as int init 595;
+
+/** Handout page height: A4 portrait, in points. */
+export def const HANDOUT_HEIGHT as int init 842;
+
+/** Slides per handout page, stacked top to bottom. */
+export def const HANDOUT_PER_PAGE as int init 3;
+
+/** Handout margin on every side, in points; the footer sits inside it. */
+export def const HANDOUT_MARGIN as int init 36;
+
+/** Space between two slides, and above the footer, in points. */
+export def const HANDOUT_GAP as int init 18;
+
+/** The narrowest column of note lines worth drawing beside a slide, in points. */
+export def const HANDOUT_NOTES_MIN as int init 80;
+
+/** Distance between two note lines, in points. */
+export def const HANDOUT_LINE_STEP as int init 20;
+
+/**
+ * A handout: the slide pages, three to an A4 portrait page.
+ *
+ * Each slide keeps its own content stream, wrapped in one scaling transform
+ * and clipped to the slide, so text stays text and pictures stay sharp. A thin
+ * frame marks each slide, its number sits under it, and where the slide leaves
+ * room on the right, ruled lines give space for notes. Links and bookmarks
+ * move with their slides.
+ * @param doc {pdf.Document} the slide document from `document`
+ * @param s {theme.Stage} the stage the slides were printed at
+ * @param label {pdf.PageLabel} the handout's running footer
+ * @return {pdf.Document} the handout document
+ */
+export func handout(doc as pdf.Document, s as theme.Stage, label as pdf.PageLabel) {
+    def top as int init HANDOUT_HEIGHT - HANDOUT_MARGIN;
+    def usableW as int init HANDOUT_WIDTH - 2 * HANDOUT_MARGIN;
+    def scale as float init slotHeight() / convert.toFloat($s.pageHeight);
+    if (convert.toFloat($s.pageWidth) * $scale > convert.toFloat($usableW)) {
+        $scale = convert.toFloat($usableW) / convert.toFloat($s.pageWidth);
+    }
+    def w as float init convert.toFloat($s.pageWidth) * $scale;
+    def h as float init convert.toFloat($s.pageHeight) * $scale;
+    def x as float init convert.toFloat(HANDOUT_MARGIN);
+    def notesX as float init $x + $w + convert.toFloat(HANDOUT_GAP);
+    def withNotes as bool init convert.toFloat(HANDOUT_WIDTH - HANDOUT_MARGIN) -
+        $notesX >=
+        convert.toFloat(HANDOUT_NOTES_MIN);
+    def pages as list of pdf.Page init [];
+    def total as int init len($doc.pages);
+    def sheets as int init ($total + HANDOUT_PER_PAGE - 1) // HANDOUT_PER_PAGE;
+    for (def n in 0..$sheets) {
+        def sheet as pdf.Page init pdf.page(HANDOUT_WIDTH, HANDOUT_HEIGHT);
+        def body as string init "";
+        def fonts as list of string init [];
+        def glyphs as list of pdf.GlyphUse init [];
+        def links as list of pdf.LinkAnnot init [];
+        def count as int init 0;
+        for (def k in 0..HANDOUT_PER_PAGE) {
+            def i as int init $n * HANDOUT_PER_PAGE + $k;
+            if ($i >= $total) {
+                break;
+            }
+            $count = $count + 1;
+            def pg as pdf.Page init $doc.pages[$i];
+            def y as float init slotY($k, $h, $top);
+            $body = $body + "q\n" + num($scale) + " 0 0 " + num($scale) + " " + num($x) + " " +
+                num($y) + " cm\n0 0 " + convert.toString($s.pageWidth) + " " +
+                convert.toString($s.pageHeight) + " re W n\n" + $pg.content + "\nQ\n";
+            $body = $body + "q 0.5 w 0.6 0.6 0.6 RG " + num($x) + " " + num($y) + " " + num($w) +
+                " " + num($h) + " re S Q\n";
+            if ($withNotes) {
+                $body = $body + noteLines($notesX, $y, $h);
+            }
+            for (def f in $pg.fonts) {
+                if (not lists.contains($fonts, $f)) {
+                    $fonts[] = $f;
+                }
+            }
+            for (def g in $pg.glyphUses) {
+                $glyphs[] = $g;
+            }
+            for (def a in $pg.annots) {
+                $links[] = pdf.LinkAnnot{
+                    x: place($x, $a.x, $scale),
+                    y: place($y, $a.y, $scale),
+                    width: place(0.0, $a.width, $scale),
+                    height: place(0.0, $a.height, $scale),
+                    uri: $a.uri
+                };
+            }
+        }
+        $sheet.content = $body;
+        $sheet.fonts = $fonts;
+        $sheet.glyphUses = $glyphs;
+        $sheet.annots = $links;
+        $sheet = pdf.color($sheet, 110, 110, 110);
+        for (def k in 0..$count) {
+            def y as float init slotY($k, $h, $top);
+            $sheet = pdf.text(
+                $sheet,
+                HANDOUT_MARGIN,
+                convert.toInt($y) - 10,
+                "Helvetica",
+                7,
+                convert.toString($n * HANDOUT_PER_PAGE + $k + 1));
+        }
+        $pages[] = $sheet;
+    }
+    def marks as list of pdf.OutlineEntry init [];
+    for (def m in $doc.outline) {
+        def moved as pdf.OutlineEntry init $m;
+        $moved.page = $m.page // HANDOUT_PER_PAGE;
+        $moved.y = place(slotY($m.page % HANDOUT_PER_PAGE, $h, $top), $m.y, $scale);
+        $marks[] = $moved;
+    }
+    def out as pdf.Document init $doc;
+    $out.pages = $pages;
+    $out.outline = $marks;
+    $out.headerOn = false;
+    $out.footerOn = false;
+    if ($label.left != "" or $label.right != "") {
+        $out = pdf.setFooter($out, $label);
+    }
+    return $out;
+}
+
+# slotHeight is the height one slide may take on a handout page.
+func slotHeight() {
+    def free as int init HANDOUT_HEIGHT -
+        2 * HANDOUT_MARGIN - HANDOUT_GAP -
+        (HANDOUT_PER_PAGE - 1) * HANDOUT_GAP;
+    return convert.toFloat($free) / convert.toFloat(HANDOUT_PER_PAGE);
+}
+
+# slotY is the bottom edge of the k-th slide on a handout page whose slides are
+# h points high.
+func slotY(k as int, h as float, top as int) {
+    def step as float init slotHeight() + convert.toFloat(HANDOUT_GAP);
+    return convert.toFloat($top) - convert.toFloat($k) * $step - $h;
+}
+
+# place maps a slide coordinate onto the handout: origin plus the scaled value,
+# rounded to whole points as link rectangles and bookmarks need.
+func place(origin as float, v as int, scale as float) {
+    return convert.toInt(math.round($origin + convert.toFloat($v) * $scale));
+}
+
+# noteLines draws light ruled lines from notesX to the right margin, over the
+# height of a slide whose bottom edge is at y.
+func noteLines(notesX as float, y as float, h as float) {
+    def right as string init num(convert.toFloat(HANDOUT_WIDTH - HANDOUT_MARGIN));
+    def out as string init "q 0.5 w 0.82 0.82 0.82 RG\n";
+    def at as float init $y + $h - convert.toFloat(HANDOUT_LINE_STEP);
+    while ($at >= $y) {
+        $out = $out + num($notesX) + " " + num($at) + " m " + $right + " " + num($at) + " l S\n";
+        $at = $at - convert.toFloat(HANDOUT_LINE_STEP);
+    }
+    return $out + "Q\n";
+}
+
+# num writes a non-negative coordinate with at most three decimals, the way a
+# content stream takes it.
+func num(v as float) {
+    def milli as int init convert.toInt(math.round($v * 1000.0));
+    def whole as int init $milli // 1000;
+    def frac as int init $milli % 1000;
+    if ($frac == 0) {
+        return convert.toString($whole);
+    }
+    def digits as string init convert.toString($frac);
+    while (len($digits) < 3) {
+        $digits = "0" + $digits;
+    }
+    while (strings.endsWith($digits, "0")) {
+        $digits = $digits[..len($digits) - 1];
+    }
+    return convert.toString($whole) + "." + $digits;
+}
+
+/**
+ * The handout's footer: the deck's label on the left and page numbers on the
+ * right, always, since a printed handout needs both to be put back in order.
+ * @param deck {slides.Deck} the deck being rendered
+ * @param opts {Options} the caller's options
+ * @return {pdf.PageLabel} the footer for every handout page
+ */
+export func handoutFooter(deck as slides.Deck, opts as Options) {
+    def out as pdf.PageLabel init footer($deck, $opts);
+    $out.right = "%page% / %pages%";
+    $out.size = 8;
+    $out.red = 110;
+    $out.green = 110;
+    $out.blue = 110;
     return $out;
 }
 

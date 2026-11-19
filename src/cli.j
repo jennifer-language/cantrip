@@ -29,7 +29,7 @@ import "./htmlout.j" as htmlout;
 import "./pdfout.j" as pdfout;
 
 /** The application version, and the version `--version` reports. */
-export def const VERSION as string init "0.4.0";
+export def const VERSION as string init "0.5.0";
 
 /** The command name, as installed on PATH. */
 export def const PROGRAM as string init "cantrip";
@@ -72,7 +72,7 @@ export def const MAX_SLIDES as int init 2000;
  * @return {list of string} the subcommand names
  */
 export func commands() {
-    return ["build", "html", "pdf", "info", "themes"];
+    return ["build", "html", "pdf", "handout", "info", "themes"];
 }
 
 /**
@@ -540,6 +540,32 @@ export func writePdf(deck as slides.Deck, r as args.Result, target as string, ba
 }
 
 /**
+ * Write the handout: the slides three to an A4 portrait page.
+ * @param deck {slides.Deck} the deck to render
+ * @param r {args.Result} the parsed command line
+ * @param target {string} where to write
+ * @param baseDir {string} the directory the first input file came from
+ * @return {Written} the byte count and the slide page count
+ * @throws {Error} kind "theme" when a name is unknown
+ */
+export func writeHandout(
+    deck as slides.Deck,
+    r as args.Result,
+    target as string,
+    baseDir as string) {
+    def opts as pdfout.Options init pdfOptions($r);
+    $opts.images = loadImages($deck, $baseDir, args.asBool($r, "verbose"));
+    def slidesDoc as pdf.Document init pdfout.document($deck, $opts);
+    def doc as pdf.Document init pdfout.handout(
+        $slidesDoc,
+        pdfout.pickStage($deck, $opts),
+        pdfout.handoutFooter($deck, $opts));
+    def out as bytes init pdf.render($doc);
+    fs.writeBytes($target, $out);
+    return Written{bytes: len($out), pages: pdf.getTotalPages($slidesDoc)};
+}
+
+/**
  * Refuse to write an output over one of the input files.
  *
  * `-o talk.md` on `cantrip html talk.md` would otherwise replace the deck
@@ -752,6 +778,17 @@ export func dispatch(verb as string, files as list of string, r as args.Result) 
         guardInputs($target, $files);
         def w as Written init writeHtml($deck, $r, $target);
         announce($target, $w.bytes, len($deck.slides), $verbose);
+        return OK;
+    }
+    if ($verb == "handout") {
+        def target as string init stem($files[0]) + "-handout.pdf";
+        if (strings.trim($given) != "") {
+            $target = strings.trim($given);
+        }
+        guardInputs($target, $files);
+        def w as Written init writeHandout($deck, $r, $target, $baseDir);
+        announce($target, $w.bytes, len($deck.slides), $verbose);
+        warnOverflow($deck, $w.pages);
         return OK;
     }
     if ($verb == "pdf") {

@@ -221,6 +221,85 @@ func testMagnify() {
     testing.assertEqual($got.outline[0].y, 450);
 }
 
+/**
+ * A deck of slide pages, each with a line of text, a link, and a bookmark.
+ * @param n {int} how many slide pages
+ * @return {pdf.Document} the slide document
+ */
+func slidePages(n as int) {
+    def doc as pdf.Document init pdf.document();
+    for (def i in 0..$n) {
+        def pg as pdf.Page init pdf.page(960, 540);
+        $pg = pdf.text($pg, 10, 20, "Helvetica", 12, "slide " + convert.toString($i));
+        $pg = pdf.link($pg, 100, 200, 300, 40, "https://example.com/");
+        $doc = pdf.addPage($doc, $pg);
+        $doc = pdf.bookmark($doc, $i, 540, "S" + convert.toString($i), 1);
+    }
+    return $doc;
+}
+
+/** Three slides fit on an A4 portrait page; a fourth starts the next page. */
+func testHandoutPutsThreeSlidesOnA4() {
+    def got as pdf.Document init handout(slidePages(4), theme.stage("16:9"), pdf.pageLabel());
+    testing.assertEqual(len($got.pages), (4 + HANDOUT_PER_PAGE - 1) // HANDOUT_PER_PAGE);
+    def first as pdf.Page init $got.pages[0];
+    testing.assertEqual($first.width, HANDOUT_WIDTH);
+    testing.assertEqual($first.height, HANDOUT_HEIGHT);
+    testing.assertEqual(len(strings.split($first.content, " re W n\n")), 4);
+    testing.assertContains($first.content, "slide 0");
+    testing.assertContains($first.content, "slide 2");
+    testing.assertFalse(strings.contains($first.content, "slide 3"));
+    testing.assertContains($got.pages[1].content, "slide 3");
+    testing.assertEqual(len($first.annots), 3);
+    testing.assertEqual(convert.stringFromBytes("utf-8", pdf.render($got)[0..5]), "%PDF-");
+}
+
+/** A slide keeps its proportions, fits the margins, and leaves room for notes. */
+func testHandoutScalesInsideTheMargins() {
+    def got as pdf.Document init handout(slidePages(1), theme.stage("16:9"), pdf.pageLabel());
+    def a as pdf.LinkAnnot init $got.pages[0].annots[0];
+    # the link sat at 100,200 (300 x 40) on a 960 x 540 slide; scaled, it keeps
+    # its 7.5:1 shape and lies inside the slide's part of the page
+    testing.assertTrue($a.x > HANDOUT_MARGIN);
+    testing.assertTrue($a.x + $a.width < HANDOUT_WIDTH - HANDOUT_MARGIN - HANDOUT_NOTES_MIN);
+    testing.assertTrue($a.width > 7 * $a.height and $a.width < 8 * $a.height);
+    testing.assertContains($got.pages[0].content, " l S\n");
+    # note lines are HANDOUT_LINE_STEP apart, and slides HANDOUT_GAP apart
+    testing.assertTrue(HANDOUT_LINE_STEP > 0 and HANDOUT_GAP > 0);
+    def two as pdf.Document init handout(slidePages(2), theme.stage("16:9"), pdf.pageLabel());
+    def upper as int init $two.pages[0].annots[0].y;
+    def lower as int init $two.pages[0].annots[1].y;
+    testing.assertTrue($upper - $lower > HANDOUT_GAP);
+}
+
+/** Bookmarks follow their slides onto the handout pages. */
+func testHandoutMovesBookmarks() {
+    def got as pdf.Document init handout(slidePages(5), theme.stage("4:3"), pdf.pageLabel());
+    testing.assertEqual(len($got.outline), 5);
+    testing.assertEqual($got.outline[0].page, 0);
+    testing.assertEqual($got.outline[2].page, 0);
+    testing.assertEqual($got.outline[3].page, 1);
+    testing.assertTrue($got.outline[0].y > $got.outline[1].y);
+    testing.assertTrue($got.outline[1].y > $got.outline[2].y);
+}
+
+/** The handout footer always numbers its pages, even when slides do not. */
+func testHandoutFooterNumbersPages() {
+    def opts as Options init defaults();
+    $opts.numbers = false;
+    def label as pdf.PageLabel init handoutFooter(fixture(), $opts);
+    testing.assertEqual($label.left, "Deck T");
+    testing.assertEqual($label.right, "%page% / %pages%");
+}
+
+/** Coordinates are written with at most three decimals. */
+func testNum() {
+    testing.assertEqual(num(36.0), "36");
+    testing.assertEqual(num(0.4417), "0.442");
+    testing.assertEqual(num(12.5), "12.5");
+    testing.assertEqual(num(0.05), "0.05");
+}
+
 /** Key caps print as code, not as their tags. */
 func testDocumentDrawsKeyCaps() {
     def deck as slides.Deck init slides.parse("# Keys\n\nPress <kbd>s</kbd>.");

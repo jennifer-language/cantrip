@@ -14,6 +14,7 @@ One command with five verbs. `cantrip --help` prints the same list, and
 | `build` | both outputs, from one parse | `<input>.html` and `<input>.pdf` |
 | `html` | the slideshow only | `<input>.html` |
 | `pdf` | the printable deck only | `<input>.pdf` |
+| `handout` | three slides to an A4 portrait page, with room for notes | `<input>-handout.pdf` |
 | `info` | report the deck's shape | nothing |
 | `themes` | list the themes, ratios, and transitions | nothing |
 
@@ -21,6 +22,7 @@ One command with five verbs. `cantrip --help` prints the same list, and
 cantrip build talk.md              # talk.html and talk.pdf
 cantrip html talk.md               # talk.html
 cantrip pdf talk.md --notes        # talk.pdf, presenter's copy
+cantrip handout talk.md            # talk-handout.pdf, to print
 cantrip info talk.md               # what is in there
 cantrip themes                     # what is available
 ```
@@ -40,6 +42,18 @@ Cantrip: 12 slide(s), 6 with notes
 
 A `*` marks a slide with speaker notes. `(no heading)` means the slide has no
 heading at all, which is usually a separator in the wrong place.
+
+### The handout
+
+`handout` prints the same slides as `pdf`, three to an A4 portrait page, for
+the audience to take home or write on. Each slide keeps its own text and
+pictures, scaled down, with a thin frame and its number under it; where the
+slide leaves room on the right, light ruled lines give space for notes. The
+footer carries the deck's title and the page numbers, whatever `--no-numbers`
+says. The PDF flags apply as for `pdf`: `--notes` puts the speaker notes on
+the slides, `--theme` and `--ratio` change the slides themselves. A slide that
+overflows its page in `pdf` overflows in the handout too, and gets the same
+warning.
 
 ## Options
 
@@ -85,7 +99,7 @@ code `1` rather than producing a page whose panel cannot open. See
 
 ### What `--out` means
 
-For `html` and `pdf` it is the **exact file** to write:
+For `html`, `pdf` and `handout` it is the **exact file** to write:
 
 ```sh
 cantrip html talk.md -o public/index.html
@@ -99,7 +113,8 @@ cantrip build talk.md -o dist/talk    # dist/talk.html and dist/talk.pdf
 ```
 
 With no `--out`, an output replaces the input's extension and sits beside it:
-`slides/talk.md` gives `slides/talk.html`.
+`slides/talk.md` gives `slides/talk.html`, and the handout
+`slides/talk-handout.pdf`.
 
 > [!NOTE]
 > `cantrip` writes files but never creates directories. `-o dist/talk` needs

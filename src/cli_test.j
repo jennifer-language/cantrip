@@ -105,9 +105,10 @@ func testCommands() {
     testing.assertContains(commands(), "build");
     testing.assertContains(commands(), "html");
     testing.assertContains(commands(), "pdf");
+    testing.assertContains(commands(), "handout");
     testing.assertContains(commands(), "info");
     testing.assertContains(commands(), "themes");
-    testing.assertEqual(len(commands()), 5);
+    testing.assertEqual(len(commands()), 6);
 }
 
 /** The parser accepts every flag the help text advertises. */
@@ -455,6 +456,19 @@ func testWritePdf() {
     testing.assertEqual(convert.stringFromBytes("utf-8", binary.slice($got, 0, 5)), "%PDF-");
 }
 
+/** The handout reports the slide pages, not its own A4 pages. */
+func testWriteHandout() {
+    def dir as string init fs.makeTempDir();
+    defer fs.removeAll($dir);
+    def target as string init path.join($dir, "out-handout.pdf");
+    def deck as slides.Deck init readDeck([writeDeck($dir, sample(), "deck.md")]);
+    def w as Written init writeHandout($deck, parsed(["handout", "a.md"]), $target, $dir);
+    testing.assertEqual($w.pages, 2);
+    def got as bytes init fs.readBytes($target);
+    testing.assertEqual(len($got), $w.bytes);
+    testing.assertEqual(convert.stringFromBytes("utf-8", binary.slice($got, 0, 5)), "%PDF-");
+}
+
 /**
  * The page count includes the pictures: a slide pushed over its page by a
  * tall image is counted from the written file, not from a text-only layout.
@@ -562,6 +576,24 @@ func testDispatchPdf() {
     testing.assertEqual(dispatch("pdf", [$target], parsed(["pdf", $target])), OK);
     testing.assertTrue(fs.isFile(stem($target) + ".pdf"));
     testing.assertFalse(fs.exists(stem($target) + ".html"));
+}
+
+/** `handout` writes `<stem>-handout.pdf`, and `-o` names it instead. */
+func testDispatchHandout() {
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
+    testing.assertEqual(dispatch("handout", [$target], parsed(["handout", $target])), OK);
+    def out as string init stem($target) + "-handout.pdf";
+    testing.assertTrue(fs.isFile($out));
+    testing.assertFalse(fs.exists(stem($target) + ".pdf"));
+    def head as bytes init fs.readBytes($out);
+    testing.assertEqual(convert.stringFromBytes("utf-8", $head[0..5]), "%PDF-");
+    def named as string init path.join($tmp, "print.pdf");
+    testing.assertEqual(
+        dispatch("handout", [$target], parsed(["handout", $target, "-o", $named])),
+        OK);
+    testing.assertTrue(fs.isFile($named));
 }
 
 /** `build` writes both, sharing one stem. */

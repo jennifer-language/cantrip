@@ -96,12 +96,14 @@ cd cantrip
 | `build` | both outputs, from one parse |
 | `html` | the slideshow only |
 | `pdf` | the printable deck only |
+| `handout` | three slides to an A4 page, with room for notes |
 | `info` | report the deck's shape, writing nothing |
 | `themes` | list the themes, ratios, and transitions |
 
 ```sh
 cantrip html talk.md --no-notes -o public/talk.html   # for the attendees
 cantrip pdf  talk.md --notes -o talk-presenter.pdf    # for you
+cantrip handout talk.md                               # to print for the room
 cantrip build talk.md --theme contrast --ratio 4:3    # for a bad projector
 cantrip info talk.md                                  # what is in there
 ```
