@@ -959,6 +959,44 @@ export func handles(tag as string) {
 }
 
 /**
+ * The language tag for a source file, from its name or, without a known
+ * extension, its `#!` line: what a file outside a deck is highlighted as.
+ * @param name {string} the file's name or path
+ * @param text {string} its contents
+ * @return {string} a tag `handles` accepts, or "" for plain text
+ */
+export func guess(name as string, text as string) {
+    def parts as list of string init strings.split(strings.lower($name), "/");
+    def base as string init $parts[len($parts) - 1];
+    if ($base == "dockerfile" or strings.startsWith($base, "dockerfile.")) {
+        return "dockerfile";
+    }
+    def pieces as list of string init strings.split($base, ".");
+    if (len($pieces) > 1 and $pieces[0] != "") {
+        def ext as string init $pieces[len($pieces) - 1];
+        if ($ext == "tmpl") {
+            return "html";
+        }
+        if (handles($ext)) {
+            return language($ext).name;
+        }
+    }
+    if (not strings.startsWith($text, "#!")) {
+        return "";
+    }
+    def line as string init strings.split($text, "\n")[0];
+    for (def w in strings.split(strings.replace($line, "/", " "), " ")) {
+        if ($w == "jennifer" or $w == "python3" or $w == "python" or $w == "php") {
+            return language($w).name;
+        }
+        if ($w == "sh" or $w == "bash" or $w == "zsh") {
+            return "sh";
+        }
+    }
+    return "";
+}
+
+/**
  * Read the deck's `highlight:` front-matter value.
  *
  * Highlighting is on unless the deck turns it off, and the value is checked

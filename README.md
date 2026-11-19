@@ -97,6 +97,7 @@ cd cantrip
 | `html` | the slideshow only |
 | `pdf` | the printable deck only |
 | `handout` | three slides to an A4 page, with room for notes |
+| `highlight` | source files as highlighted HTML fragments |
 | `info` | report the deck's shape, writing nothing |
 | `themes` | list the themes, ratios, and transitions |
 

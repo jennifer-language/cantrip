@@ -17,6 +17,7 @@ use testing;
 use maps;
 use binary;
 use encoding;
+use os;
 
 /** A small deck, written to a temporary file by `writeDeck`. */
 func sample() {
@@ -108,7 +109,8 @@ func testCommands() {
     testing.assertContains(commands(), "handout");
     testing.assertContains(commands(), "info");
     testing.assertContains(commands(), "themes");
-    testing.assertEqual(len(commands()), 6);
+    testing.assertContains(commands(), "highlight");
+    testing.assertEqual(len(commands()), 7);
 }
 
 /** The parser accepts every flag the help text advertises. */
@@ -850,4 +852,44 @@ func testStartFlags() {
         }
         testing.assertEqual($kind, "cli");
     }
+}
+
+/** highlight writes each file below --out as an escaped, highlighted fragment. */
+func testHighlightFiles() {
+    def src as string init fs.makeTempDir(os.cwd());
+    defer fs.removeAll($src);
+    def out as string init fs.makeTempDir();
+    defer fs.removeAll($out);
+    def rel as string init path.base($src);
+    fs.mkdirAll(path.join($src, "bin"));
+    fs.writeString(path.join($src, "main.j"), "def x as int init 1; # <b>\n");
+    fs.writeString(path.join($src, "bin", "tool"), "#!/usr/bin/env jennifer\nreturn 0;\n");
+    fs.writeString(path.join($src, "notes.txt"), "a < b\n");
+    testing.assertEqual(
+        highlightFiles(
+            [
+                path.join($rel, "main.j"),
+                path.join($rel, "bin", "tool"),
+                path.join($rel, "notes.txt")
+            ],
+            $out),
+        OK);
+    def main as string init fs.readString(path.join($out, $rel, "main.j.html"));
+    testing.assertContains($main, "<span class=\"hljs-keyword\">def</span>");
+    testing.assertContains($main, "&lt;b&gt;");
+    testing.assertContains(fs.readString(path.join($out, $rel, "bin", "tool.html")), "hljs-");
+    testing.assertEqual(fs.readString(path.join($out, $rel, "notes.txt.html")), "a &lt; b\n");
+}
+
+/** highlight --out refuses a path that would leave the output directory. */
+func testHighlightFilesStaysBelowOut() {
+    def out as string init fs.makeTempDir();
+    defer fs.removeAll($out);
+    def kind as string init "";
+    try {
+        highlightFiles(["../x.j"], $out);
+    } catch (e) {
+        $kind = $e.kind;
+    }
+    testing.assertEqual($kind, "cli");
 }

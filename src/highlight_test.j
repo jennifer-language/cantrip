@@ -434,3 +434,21 @@ func testEnabled() {
     }
     testing.assertEqual(enabledFailure("false"), "");
 }
+
+/** A file's language comes from its extension, else its #! line. */
+func testGuess() {
+    testing.assertEqual(guess("src/main.j", ""), "jennifer");
+    testing.assertEqual(guess("tools/run.sh", ""), "sh");
+    testing.assertEqual(guess("deck.toml", ""), "toml");
+    testing.assertEqual(guess("ci.YML", ""), "yaml");
+    testing.assertEqual(guess("page.tmpl", ""), "html");
+    testing.assertEqual(guess("app/Dockerfile", ""), "dockerfile");
+    testing.assertEqual(
+        guess("bin/serve", "#!/usr/bin/env jennifer\nio.println(1);\n"),
+        "jennifer");
+    testing.assertEqual(guess("bin/run", "#!/bin/bash\necho\n"), "sh");
+    testing.assertEqual(guess("notes.md", "#!/bin/sh\n"), "sh");
+    testing.assertEqual(guess("README.md", "# Title\n"), "");
+    testing.assertEqual(guess(".env.example", "A=1\n"), "");
+    testing.assertEqual(guess("bin/tool", "no shebang\n"), "");
+}

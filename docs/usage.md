@@ -15,6 +15,7 @@ One command with five verbs. `cantrip --help` prints the same list, and
 | `html` | the slideshow only | `<input>.html` |
 | `pdf` | the printable deck only | `<input>.pdf` |
 | `handout` | three slides to an A4 portrait page, with room for notes | `<input>-handout.pdf` |
+| `highlight` | source files as highlighted HTML, for code shown outside a deck | standard output, or `<dir>/<file>.html` |
 | `info` | report the deck's shape | nothing |
 | `themes` | list the themes, ratios, and transitions | nothing |
 
@@ -23,6 +24,7 @@ cantrip build talk.md              # talk.html and talk.pdf
 cantrip html talk.md               # talk.html
 cantrip pdf talk.md --notes        # talk.pdf, presenter's copy
 cantrip handout talk.md            # talk-handout.pdf, to print
+cantrip highlight app.j            # app.j as highlighted HTML
 cantrip info talk.md               # what is in there
 cantrip themes                     # what is available
 ```
@@ -97,6 +99,26 @@ open when the page loads (`--notes` already means "notes in the PDF"). It needs
 the notes in the page, so `--no-notes --notes-panel open` is refused with exit
 code `1` rather than producing a page whose panel cannot open. See
 [How the slideshow opens](format.md#how-the-slideshow-opens).
+
+### Highlighting source files
+
+`highlight` colours source files with the highlighter the slides use, for a
+page that shows code beside a deck: a site's listing of a talk's programs, say.
+It writes HTML fragments, the file's text escaped and wrapped in highlight.js
+class names (`hljs-keyword`, `hljs-string`, ...), ready to go inside
+`<pre><code>`; the page brings its own colours for those classes. The language
+comes from the file's extension, or for a file without one (a `bin/` launcher)
+from its `#!` line; a file in a language the highlighter does not know comes
+out as escaped plain text.
+
+```sh
+cantrip highlight app.j > app.html          # one file to standard output
+cantrip highlight -o out src/app.j bin/run  # out/src/app.j.html and out/bin/run.html
+```
+
+With `--out`, each file keeps its path below the directory, so the paths must
+be relative and stay below it (`../x.j` is refused). The directory itself must
+exist; the ones below it are made.
 
 ### What `--out` means
 

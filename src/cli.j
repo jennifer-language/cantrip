@@ -27,9 +27,10 @@ import "./slides.j" as slides;
 import "./theme.j" as theme;
 import "./htmlout.j" as htmlout;
 import "./pdfout.j" as pdfout;
+import "./highlight.j" as highlight;
 
 /** The application version, and the version `--version` reports. */
-export def const VERSION as string init "0.5.1";
+export def const VERSION as string init "0.5.2";
 
 /** The command name, as installed on PATH. */
 export def const PROGRAM as string init "cantrip";
@@ -72,7 +73,7 @@ export def const MAX_SLIDES as int init 2000;
  * @return {list of string} the subcommand names
  */
 export func commands() {
-    return ["build", "html", "pdf", "handout", "info", "themes"];
+    return ["build", "html", "pdf", "handout", "highlight", "info", "themes"];
 }
 
 /**
@@ -92,8 +93,14 @@ export func parser() {
         $p,
         "argv",
         "a command (" +
-            strings.join(commands(), " | ") + ") followed by Markdown files");
-    $p = args.flag($p, "out", "o", "", "output path; for build, the path without an extension");
+            strings.join(commands(), " | ") +
+            ") followed by Markdown files (for highlight, source files)");
+    $p = args.flag(
+        $p,
+        "out",
+        "o",
+        "",
+        "output path; for build, the path without an extension; for highlight, a directory");
     $p = args.flag($p, "theme", "t", "", "theme name (default: the deck's own, else plain)");
     $p = args.flag($p, "mode", "", "", "HTML: light or dark mode at start");
     $p = args.flag($p, "ratio", "r", "", "aspect ratio: 16:9, 16:10 or 4:3");
@@ -731,6 +738,14 @@ export func run(argv as list of string) {
     if ($verb == "themes") {
         return listThemes();
     }
+    if ($verb == "highlight") {
+        try {
+            return highlightFiles($files, args.asString($r, "out"));
+        } catch (e) {
+            io.eprintf("%s: %s\n", PROGRAM, printable($e.message));
+            return FAILED;
+        }
+    }
     if (len($files) == 0) {
         io.eprintf("%s: %s needs at least one Markdown file\n", PROGRAM, $verb);
         return MISUSE;
@@ -752,6 +767,87 @@ export func run(argv as list of string) {
         io.eprintf("%s: %s\n", PROGRAM, printable($e.message));
         return FAILED;
     }
+}
+
+/**
+ * The `highlight` verb: source files as highlighted HTML fragments, for a page
+ * that shows code outside a deck (a site's code listings, say).
+ *
+ * Each fragment is the escaped text with highlight.js class names, ready to go
+ * inside `<pre><code>`; the language comes from the file's name or its `#!`
+ * line (`highlight.guess`), and a file in no known language is escaped plain
+ * text. With `--out DIR`, each FILE is written to `DIR/FILE.html`, so FILE must
+ * be a relative path that stays below DIR; DIR must exist, the directories
+ * below it are made. Without `--out`, the one FILE given goes to standard
+ * output.
+ * @param files {list of string} the source files
+ * @param out {string} the output directory, "" for standard output
+ * @return {int} `OK`, or `MISUSE` for a bad command line
+ * @throws {Error} kind "cli" for a missing file or directory or a path outside `out`, kind
+ *   "limit" for a file over `MAX_DECK_BYTES`
+ */
+export func highlightFiles(files as list of string, out as string) {
+    if (len($files) == 0) {
+        io.eprintf("%s: highlight needs at least one file\n", PROGRAM);
+        return MISUSE;
+    }
+    def dir as string init strings.trim($out);
+    if ($dir == "") {
+        if (len($files) != 1) {
+            io.eprintf("%s: highlight writes more than one file only with --out\n", PROGRAM);
+            return MISUSE;
+        }
+        io.printf("%s", highlightOne($files[0]));
+        return OK;
+    }
+    if (not fs.isDir($dir)) {
+        throw Error{
+            kind: "cli",
+            message: "no such directory: " + $dir,
+            file: $dir,
+            line: 0,
+            col: 0
+        };
+    }
+    for (def f in $files) {
+        if (path.isAbs($f) or lists.contains(strings.split($f, "/"), "..")) {
+            throw Error{
+                kind: "cli",
+                message: "highlight --out takes paths below the current directory, got " + $f,
+                file: $f,
+                line: 0,
+                col: 0
+            };
+        }
+    }
+    for (def f in $files) {
+        def target as string init path.join($dir, $f + ".html");
+        def html as string init highlightOne($f);
+        fs.mkdirAll(path.dir($target));
+        fs.writeString($target, $html);
+    }
+    return OK;
+}
+
+# highlightOne reads one source file, with readDeck's checks and size cap, and
+# returns it highlighted.
+func highlightOne(p as string) {
+    if (not fs.isFile($p)) {
+        throw Error{kind: "cli", message: "no such file: " + $p, file: $p, line: 0, col: 0};
+    }
+    def size as int init fs.stat($p).size;
+    if ($size > MAX_DECK_BYTES) {
+        throw Error{
+            kind: "limit",
+            message: $p + " is " + convert.toString($size) + " bytes; highlight reads at most " +
+                convert.toString(MAX_DECK_BYTES) + " (2 MiB)",
+            file: $p,
+            line: 0,
+            col: 0
+        };
+    }
+    def text as string init fs.readString($p);
+    return highlight.toHtml($text, highlight.guess($p, $text));
 }
 
 /**
