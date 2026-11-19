@@ -338,7 +338,7 @@ export def const HANDOUT_TITLE_SIZE as int init 11;
  *
  * Each slide keeps its own content stream, wrapped in one scaling transform
  * and clipped to the slide, so text stays text and pictures stay sharp. A thin
- * frame marks each slide, its number sits under it, and where the slide leaves
+ * frame marks each slide, its number sits under its right edge, and where the slide leaves
  * room on the right, ruled lines give space for notes. The deck's title heads
  * every page, above its first slide. Links and bookmarks move with their slides.
  * @param doc {pdf.Document} the slide document from `document`
@@ -428,15 +428,18 @@ export func handout(
                 $heading);
         }
         $sheet = pdf.color($sheet, 110, 110, 110);
+        # Each slide's number sits under its right edge, clear of the footer
+        # text that starts at the left margin under the last slide.
         for (def k in 0..$count) {
             def y as float init slotY($k, $h, $top);
+            def shown as string init convert.toString($n * HANDOUT_PER_PAGE + $k + 1);
             $sheet = pdf.text(
                 $sheet,
-                HANDOUT_MARGIN,
+                convert.toInt(math.round($x + $w - pdf.measureText("Helvetica", 7, $shown))),
                 convert.toInt($y) - 10,
                 "Helvetica",
                 7,
-                convert.toString($n * HANDOUT_PER_PAGE + $k + 1));
+                $shown);
         }
         $pages[] = $sheet;
     }

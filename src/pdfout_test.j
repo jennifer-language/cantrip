@@ -13,6 +13,7 @@ use testing;
 use maps;
 use binary;
 use convert;
+use regex;
 use encoding;
 
 /**
@@ -745,4 +746,17 @@ func testPaintPage() {
     testing.assertTrue($got.cursor.active);
     testing.assertEqual($got.cursor.line, 1);
     testing.assertEqual($got.cursor.next, 1);
+}
+
+/** A slide's number sits under its right edge, not at the left margin with the footer. */
+func testHandoutNumbersOnTheRight() {
+    def got as pdf.Document init handout(slidePages(3), theme.stage("16:9"), "", pdf.pageLabel());
+    def body as string init $got.pages[0].content;
+    def m as regex.Match init regex.find('([0-9.]+) [0-9.]+ Td\n\(3\) Tj', $body);
+    testing.assertTrue($m.start >= 0);
+    def frame as regex.Match init regex.find('RG ([0-9.]+) [0-9.]+ ([0-9.]+) [0-9.]+ re S', $body);
+    def right as float init convert.toFloat($frame.groups[0]) + convert.toFloat($frame.groups[1]);
+    def numX as float init convert.toFloat($m.groups[0]);
+    testing.assertTrue($numX > convert.toFloat(HANDOUT_MARGIN) + 100.0);
+    testing.assertTrue($numX < $right and $right - $numX < 10.0);
 }

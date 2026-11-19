@@ -49,7 +49,7 @@ heading at all, which is usually a separator in the wrong place.
 
 `handout` prints the same slides as `pdf`, three to an A4 portrait page, for
 the audience to take home or write on. Each slide keeps its own text and
-pictures, scaled down, with a thin frame and its number under it; where the
+pictures, scaled down, with a thin frame and its number under its right edge; where the
 slide leaves room on the right, light ruled lines give space for notes. The
 deck's title heads every page, above its first slide. The footer carries the
 `--footer` text, if you give one (a URL to the slides, say), and the page
