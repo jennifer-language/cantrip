@@ -112,6 +112,9 @@ jobs:
           test -s docs-site/index.html
 
       - name: Upload the artifacts
+        # Forgejo's runner has no artifact service for upload-artifact v4 and
+        # later (GHESNotSupportedError), so only GitHub keeps the upload.
+        if: github.server_url == 'https://github.com'
         uses: actions/upload-artifact@v4
         with:
           name: dist
