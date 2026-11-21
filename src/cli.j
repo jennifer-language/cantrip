@@ -34,7 +34,7 @@ import "./highlight.j" as highlight;
 import "./plugin.j" as plugin;
 
 /** The application version, and the version `--version` reports. */
-export def const VERSION as string init "0.5.3";
+export def const VERSION as string init "0.6.0";
 
 /** The command name, as installed on PATH. */
 export def const PROGRAM as string init "cantrip";
