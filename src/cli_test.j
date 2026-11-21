@@ -19,6 +19,7 @@ use binary;
 use encoding;
 use os;
 use json;
+use images;
 
 /** A small deck, written to a temporary file by `writeDeck`. */
 func sample() {
@@ -112,7 +113,8 @@ func testCommands() {
     testing.assertContains(commands(), "themes");
     testing.assertContains(commands(), "highlight");
     testing.assertContains(commands(), "plugins");
-    testing.assertEqual(len(commands()), 8);
+    testing.assertContains(commands(), "serve");
+    testing.assertEqual(len(commands()), 9);
 }
 
 /** The parser accepts every flag the help text advertises. */
@@ -1135,4 +1137,125 @@ func testNotesBesideTheHandoutSlides() {
     testing.assertTrue(fs.isFile($out));
     def r as args.Result init parsed(["handout", "a.md", "--notes-beside"]);
     testing.assertTrue(args.asBool($r, "notes-beside"));
+}
+
+# The PDF draws no SVG: a deck's own SVG picture is drawn from the PNG beside
+# it, and one with no PNG falls back to its alt text.
+func testAnSvgIsPrintedFromThePngBesideIt() {
+    def dir as string init fs.realpath(fs.makeTempDir());
+    defer fs.removeAll($dir);
+    def target as string init writeDeck(
+        $dir,
+        "# A\n\n![fig](fig.svg)\n\n---\n\n# B\n\n![lone](lone.svg)\n",
+        "deck.md");
+    fs.writeString(path.join($dir, "fig.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"/>");
+    fs.writeString(path.join($dir, "lone.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"/>");
+    fs.writeBytes(path.join($dir, "fig.png"), images.encode("png", images.create(4, 4)));
+    def got as map of string to pdf.Image init loadImages(readDeck([$target]), $dir, false);
+    testing.assertTrue(maps.has($got, "fig.svg"));
+    testing.assertFalse(maps.has($got, "lone.svg"));
+}
+
+func testQuietPrintsNothingOnSuccess() {
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
+    testing.assertEqual(run(["cantrip", "html", $target, "-q"]), OK);
+    testing.assertTrue(fs.isFile(stem($target) + ".html"));
+    testing.assertEqual(run(["cantrip", "html", $target, "--quiet", "--verbose"]), MISUSE);
+    announceFor("x.html", 10, 2, parsed(["html", "a.md", "--quiet"]));
+    announceFor("x.html", 10, 2, parsed(["html", "a.md"]));
+}
+
+# A favicon beside the deck is carried inside the page; a URL is linked as
+# written; anything unusable stops the build.
+func testTheFaviconIsEmbedded() {
+    def dir as string init fs.realpath(fs.makeTempDir());
+    defer fs.removeAll($dir);
+    fs.writeBytes(path.join($dir, "icon.png"), images.encode("png", images.create(4, 4)));
+    def target as string init writeDeck($dir, "---\nfavicon: icon.png\n---\n# A\n", "deck.md");
+    testing.assertEqual(dispatch("html", [$target], parsed(["html", $target])), OK);
+    def page as string init fs.readString(path.join($dir, "deck.html"));
+    testing.assertContains($page, '<link rel="icon" href="data:image/png;base64,');
+    def deck as slides.Deck init readDeck([$target]);
+    def w as Written init writeHtmlIn(
+        $deck,
+        parsed(["html", $target]),
+        path.join($dir, "b.html"),
+        "",
+        $dir);
+    testing.assertTrue($w.bytes > 0);
+    testing.assertEqual(
+        faviconHref(slides.parse("---\nfavicon: https://e.test/i.png\n---\n# A\n"), $dir),
+        "https://e.test/i.png");
+    testing.assertEqual(faviconHref(slides.parse("# A\n"), $dir), "");
+    fs.writeString(path.join($dir, "f.ico"), "x");
+    testing.assertTrue(strings.startsWith(
+        faviconHref(slides.parse("---\nfavicon: f.ico\n---\n# A\n"), $dir),
+        "data:image/x-icon;base64,"));
+}
+
+func badFavicon(value as string, dir as string) {
+    try {
+        faviconHref(slides.parse("---\nfavicon: " + $value + "\n---\n# A\n"), $dir);
+    } catch (e) {
+        testing.assertEqual($e.kind, "cli");
+        return $e.message;
+    }
+    testing.assertTrue(false);
+    return "";
+}
+
+func testAnUnusableFaviconStopsTheBuild() {
+    def dir as string init fs.realpath(fs.makeTempDir());
+    defer fs.removeAll($dir);
+    testing.assertContains(badFavicon("missing.png", $dir), "not found");
+    testing.assertContains(badFavicon("icon.bmp", $dir), "wants a .png");
+    testing.assertContains(badFavicon("data:image/png;base64,AA", $dir), "wants a .png");
+    testing.assertContains(badFavicon("../outside.png", $dir), "favicon: ../outside.png");
+}
+
+# --- serve ---------------------------------------------------------------
+
+func testServeBuildsWhatIsOnDisk() {
+    def dir as string init fs.realpath(fs.makeTempDir());
+    defer fs.removeAll($dir);
+    def target as string init writeDeck($dir, sample(), "deck.md");
+    def first as string init fingerprint([$target]);
+    testing.assertContains($first, "deck.md:");
+    fs.writeString(path.join($dir, "pic.png"), "x");
+    testing.assertTrue(fingerprint([$target]) != $first);
+    def page as string init servedPage([$target], parsed(["serve", $target]));
+    testing.assertContains($page, "<title>Fixture</title>");
+    testing.assertContains($page, 'fetch("' + RELOAD_PATH + '"');
+    fs.writeString($target, "---\ntheme: nosuchtheme\n---\n# A\n");
+    def broken as string init servedPage([$target], parsed(["serve", $target]));
+    testing.assertContains($broken, "The deck does not build");
+    testing.assertContains($broken, "nosuchtheme");
+    testing.assertEqual(DEFAULT_ADDR, "127.0.0.1:8080");
+    testing.assertTrue(POLL_MS > 0);
+}
+
+func testServeRefusesAnAddressItCannotBind() {
+    def dir as string init fs.realpath(fs.makeTempDir());
+    defer fs.removeAll($dir);
+    def target as string init writeDeck($dir, sample(), "deck.md");
+    def threw as bool init false;
+    try {
+        serveDeck([$target], parsed(["serve", $target, "--addr", "256.1.1.1:1"]));
+    } catch (e) {
+        $threw = true;
+    }
+    testing.assertTrue($threw);
+    testing.assertEqual(args.asString(parsed(["serve", "a.md"]), "addr"), DEFAULT_ADDR);
+}
+
+func testRenderHtmlInIsWhatHtmlWrites() {
+    def dir as string init fs.realpath(fs.makeTempDir());
+    defer fs.removeAll($dir);
+    def target as string init writeDeck($dir, sample(), "deck.md");
+    def deck as slides.Deck init readDeck([$target]);
+    def page as string init renderHtmlIn($deck, parsed(["html", $target]), "", $dir);
+    writeHtmlIn($deck, parsed(["html", $target]), path.join($dir, "w.html"), "", $dir);
+    testing.assertEqual(fs.readString(path.join($dir, "w.html")), $page);
 }

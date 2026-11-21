@@ -23,6 +23,7 @@ use regex;
 use os;
 use meta;
 use encoding;
+use httpd;
 
 import "args.j" as args;
 import "pdf.j" as pdf;
@@ -69,6 +70,15 @@ export def const REMOTE as list of string init ["http://", "https://", "data:", 
  */
 export def const MAX_DECK_BYTES as int init 2097152;
 
+/** Where `serve` listens unless `--addr` says otherwise: this machine only. */
+export def const DEFAULT_ADDR as string init "127.0.0.1:8080";
+
+/** The path the page `serve` hands out polls for the build token. */
+export def const RELOAD_PATH as string init "/.cantrip-reload";
+
+/** How often that page asks, in milliseconds. */
+export def const POLL_MS as int init 700;
+
 /** The most slides a deck may hold, across all its files. */
 export def const MAX_SLIDES as int init 2000;
 
@@ -77,7 +87,7 @@ export def const MAX_SLIDES as int init 2000;
  * @return {list of string} the subcommand names
  */
 export func commands() {
-    return ["build", "html", "pdf", "handout", "highlight", "info", "plugins", "themes"];
+    return ["build", "html", "pdf", "handout", "highlight", "info", "plugins", "serve", "themes"];
 }
 
 /**
@@ -106,7 +116,7 @@ export func parser() {
         "",
         "output path; for build, the path without an extension; for highlight, a directory");
     $p = args.flag($p, "theme", "t", "", "theme name (default: the deck's own, else plain)");
-    $p = args.flag($p, "mode", "", "", "HTML: light or dark mode at start");
+    $p = args.flag($p, "mode", "", "", "HTML: light, dark or auto (the system's) mode at start");
     $p = args.flag($p, "ratio", "r", "", "aspect ratio: 16:9, 16:10 or 4:3");
     $p = args.flag(
         $p,
@@ -128,7 +138,13 @@ export func parser() {
     $p = args.flag($p, "overview", "", "", "HTML: overview open or closed at start");
     $p = args.boolFlag($p, "no-numbers", "", "omit slide numbers");
     $p = args.boolFlag($p, "raw-html", "", "pass raw HTML in the Markdown through unescaped");
+    $p = args.flag($p, "addr", "a", DEFAULT_ADDR, "serve: the address to listen on");
     $p = args.boolFlag($p, "verbose", "v", "report what was written");
+    $p = args.boolFlag(
+        $p,
+        "quiet",
+        "q",
+        "print nothing on success; warnings and errors still go to stderr");
     return $p;
 }
 
@@ -673,8 +689,9 @@ export func loadImages(deck as slides.Deck, baseDir as string, verbose as bool) 
  * `loadImages`, also drawing the pictures preprocessors generated.
  *
  * A target under `_generated/` is read from the scratch directory rather than
- * beside the deck, and an SVG is drawn from the PNG beside it, because the PDF
- * draws no SVG (`plugin.printable`).
+ * beside the deck. An SVG, generated or the deck's own, is drawn from the PNG
+ * beside it, because the PDF draws no SVG (`plugin.printable`); without one,
+ * the PDF shows the alt text.
  * @param deck {slides.Deck} the deck to scan
  * @param baseDir {string} the directory the first input file came from
  * @param verbose {bool} report each picture that was skipped, and why
@@ -714,7 +731,8 @@ export func loadImagesWith(
             }
             continue;
         }
-        def where as Located init locate($url, $baseDir);
+        # The PDF draws no SVG, so an SVG is drawn from the PNG beside it.
+        def where as Located init locate(plugin.printable($url), $baseDir);
         if ($where.path == "") {
             if ($verbose) {
                 io.eprintf("  image %s, using alt text: %s\n", $where.reason, printable($url));
@@ -943,11 +961,99 @@ export func writeHtml(deck as slides.Deck, r as args.Result, target as string) {
  * @throws {Error} kind "theme" when a name is unknown
  */
 export func writeHtmlWith(deck as slides.Deck, r as args.Result, target as string, root as string) {
-    def opts as htmlout.Options init htmlOptions($r);
-    $opts.embedded = embeddedImages($deck, $root);
-    def out as string init htmlout.render($deck, $opts);
+    return writeHtmlIn($deck, $r, $target, $root, ".");
+}
+
+/**
+ * `writeHtmlWith` for a deck in `baseDir`, which its `favicon:` is read from.
+ * @param deck {slides.Deck} the deck to render
+ * @param r {args.Result} the parsed command line
+ * @param target {string} where to write
+ * @param root {string} the scratch directory, "" when no preprocessor ran
+ * @param baseDir {string} the directory the first input file came from
+ * @return {Written} the byte count; an HTML file has no pages
+ * @throws {Error} kind "theme" when a name is unknown, kind "cli" when the
+ *     deck's `favicon:` cannot be used
+ */
+export func writeHtmlIn(
+    deck as slides.Deck,
+    r as args.Result,
+    target as string,
+    root as string,
+    baseDir as string) {
+    def out as string init renderHtmlIn($deck, $r, $root, $baseDir);
     fs.writeString($target, $out);
     return Written{bytes: len(convert.bytesFromString("utf-8", $out)), pages: 0};
+}
+
+/**
+ * The slideshow for a deck in `baseDir`, as `html` writes it: generated
+ * pictures and the favicon carried inside the page.
+ * @param deck {slides.Deck} the deck to render
+ * @param r {args.Result} the parsed command line
+ * @param root {string} the scratch directory, "" when no preprocessor ran
+ * @param baseDir {string} the directory the first input file came from
+ * @return {string} the whole HTML document
+ * @throws {Error} kind "theme" when a name is unknown, kind "cli" when the
+ *     deck's `favicon:` cannot be used
+ */
+export func renderHtmlIn(deck as slides.Deck, r as args.Result, root as string, baseDir as string) {
+    def opts as htmlout.Options init htmlOptions($r);
+    $opts.embedded = embeddedImages($deck, $root);
+    $opts.favicon = faviconHref($deck, $baseDir);
+    return htmlout.render($deck, $opts);
+}
+
+/**
+ * The page's icon from the deck's `favicon:` key, ready for the `href` of a
+ * `<link rel="icon">`.
+ *
+ * An http(s) URL is linked as written. Anything else is a picture beside the
+ * deck, found by the rule pictures follow (`locate`: inside the deck's
+ * directory only), and carried inside the page as a `data:` URL, so the
+ * slideshow stays one file. A key that names nothing usable stops the build:
+ * the author asked for an icon, and a silently missing one is a mistake found
+ * late.
+ * @param deck {slides.Deck} the deck
+ * @param baseDir {string} the directory the first input file came from
+ * @return {string} the `href`, "" when the deck sets no favicon
+ * @throws {Error} kind "cli" for a missing or refused file, or a type that is
+ *     not .png, .svg, .ico, .gif or .jpg
+ */
+export func faviconHref(deck as slides.Deck, baseDir as string) {
+    def value as string init strings.trim(slides.metaOr($deck.meta, "favicon", ""));
+    if ($value == "") {
+        return "";
+    }
+    def lower as string init strings.lower($value);
+    if (strings.startsWith($lower, "https://") or strings.startsWith($lower, "http://")) {
+        return $value;
+    }
+    def kind as string init plugin.mediaType($value);
+    if (strings.endsWith($lower, ".ico")) {
+        $kind = "image/x-icon";
+    }
+    if ($kind == "" or isRemote($value)) {
+        throw Error{
+            kind: "cli",
+            message: "favicon: wants a .png, .svg, .ico, .gif or .jpg file beside the deck, " +
+                "or an http(s) URL; got \"" + $value + "\"",
+            file: "",
+            line: 0,
+            col: 0
+        };
+    }
+    def where as Located init locate($value, $baseDir);
+    if ($where.path == "") {
+        throw Error{
+            kind: "cli",
+            message: "favicon: " + $value + " " + $where.reason,
+            file: "",
+            line: 0,
+            col: 0
+        };
+    }
+    return "data:" + $kind + ";base64," + encoding.toText("base64", fs.readBytes($where.path));
 }
 
 /**
@@ -1238,6 +1344,15 @@ export func run(argv as list of string) {
     try {
         bookmarkDepth(args.asString($r, "bookmarks"));
         startFlags($r);
+        if (args.asBool($r, "quiet") and args.asBool($r, "verbose")) {
+            throw Error{
+                kind: "cli",
+                message: "--quiet and --verbose ask for opposite things; give one",
+                file: "",
+                line: 0,
+                col: 0
+            };
+        }
     } catch (e) {
         io.eprintf("%s: %s\n", PROGRAM, $e.message);
         return MISUSE;
@@ -1349,6 +1464,9 @@ export func dispatch(verb as string, files as list of string, r as args.Result) 
     if ($verb == "plugins") {
         return listPlugins($baseDir);
     }
+    if ($verb == "serve") {
+        return serveDeck($files, $r);
+    }
     def given as string init args.asString($r, "out");
     def verbose as bool init args.asBool($r, "verbose");
     def outDir as string init $baseDir;
@@ -1367,8 +1485,8 @@ export func dispatch(verb as string, files as list of string, r as args.Result) 
     if ($verb == "html") {
         def target as string init outputPath($files[0], "html", $given);
         guardInputs($target, $files);
-        def w as Written init writeHtmlWith($deck, $r, $target, $pre.root);
-        announce($target, $w.bytes, len($deck.slides), $verbose);
+        def w as Written init writeHtmlIn($deck, $r, $target, $pre.root, $baseDir);
+        announceFor($target, $w.bytes, len($deck.slides), $r);
         return OK;
     }
     if ($verb == "handout") {
@@ -1378,7 +1496,7 @@ export func dispatch(verb as string, files as list of string, r as args.Result) 
         }
         guardInputs($target, $files);
         def w as Written init writeHandoutWith($deck, $r, $target, $baseDir, $pre.root);
-        announce($target, $w.bytes, len($deck.slides), $verbose);
+        announceFor($target, $w.bytes, len($deck.slides), $r);
         warnOverflow($deck, $w.pages);
         return OK;
     }
@@ -1386,7 +1504,7 @@ export func dispatch(verb as string, files as list of string, r as args.Result) 
         def target as string init outputPath($files[0], "pdf", $given);
         guardInputs($target, $files);
         def w as Written init writePdfWith($deck, $r, $target, $baseDir, $pre.root);
-        announce($target, $w.bytes, len($deck.slides), $verbose);
+        announceFor($target, $w.bytes, len($deck.slides), $r);
         warnOverflow($deck, $w.pages);
         return OK;
     }
@@ -1401,12 +1519,150 @@ export func dispatch(verb as string, files as list of string, r as args.Result) 
     def pdfTarget as string init $base + ".pdf";
     guardInputs($htmlTarget, $files);
     guardInputs($pdfTarget, $files);
-    def page as Written init writeHtmlWith($deck, $r, $htmlTarget, $pre.root);
-    announce($htmlTarget, $page.bytes, len($deck.slides), $verbose);
+    def page as Written init writeHtmlIn($deck, $r, $htmlTarget, $pre.root, $baseDir);
+    announceFor($htmlTarget, $page.bytes, len($deck.slides), $r);
     def printed as Written init writePdfWith($deck, $r, $pdfTarget, $baseDir, $pre.root);
-    announce($pdfTarget, $printed.bytes, len($deck.slides), $verbose);
+    announceFor($pdfTarget, $printed.bytes, len($deck.slides), $r);
     warnOverflow($deck, $printed.pages);
     return OK;
+}
+
+/**
+ * The build token `serve` compares: the modification times of the deck's
+ * files and of every file beside the first one, so saving the deck, its
+ * `cantrip.toml` or a picture changes it.
+ * @param files {list of string} the input files
+ * @return {string} the token
+ */
+export func fingerprint(files as list of string) {
+    def parts as list of string init [];
+    for (def f in $files) {
+        if (fs.isFile($f)) {
+            $parts[] = $f + ":" + convert.toString(fs.stat($f).mtimeNanos);
+        }
+    }
+    def dir as string init dirOf(path.dir($files[0]));
+    for (def name in fs.list($dir)) {
+        def p as string init path.join($dir, $name);
+        if (fs.isFile($p)) {
+            $parts[] = $name + ":" + convert.toString(fs.stat($p).mtimeNanos);
+        }
+    }
+    return strings.join($parts, ",");
+}
+
+/**
+ * The slideshow `serve` hands out: built as `html` builds it, plugins and all,
+ * with the reload script added; or, when the deck does not build, a page that
+ * says why and reloads once it does.
+ * @param files {list of string} the input files
+ * @param r {args.Result} the parsed command line
+ * @return {string} the page
+ */
+export func servedPage(files as list of string, r as args.Result) {
+    def script as string init htmlout.reloadScript(RELOAD_PATH, POLL_MS);
+    def baseDir as string init path.dir($files[0]);
+    try {
+        def pre as Preprocessed init preprocess(readSources($files), $baseDir, $baseDir, false);
+        defer discard($pre.root);
+        def deck as slides.Deck init deckFrom($pre.sources);
+        requireSlides($deck);
+        return htmlout.withScript(renderHtmlIn($deck, $r, $pre.root, $baseDir), $script);
+    } catch (e) {
+        io.eprintf("%s: %s\n", PROGRAM, printable($e.message));
+        return htmlout.withScript(htmlout.errorPage($e.message), $script);
+    }
+    return "";
+}
+
+# servedUrl turns a listen address into something a reader can click.
+func servedUrl(addr as string) {
+    def host as string init $addr;
+    if (strings.startsWith($host, ":")) {
+        $host = "localhost" + $host;
+    } elseif (strings.startsWith($host, "0.0.0.0:")) {
+        $host = "localhost" + $host[7..];
+    }
+    return "http://" + $host + "/";
+}
+
+/**
+ * The `serve` verb: show the deck in a browser while it is being written.
+ *
+ * The slideshow is built when the browser asks for it, so it is always the
+ * deck as it is on disk, and the page carries a script that polls the build
+ * token and reloads when a file changes. Anything else is a file from the
+ * deck's directory, so pictures beside the deck load as they will from the
+ * published copy. One request is answered at a time: a deck is one page, and a
+ * build is not shared between spawned workers, each of which would hold its
+ * own copy. Nothing is written to disk.
+ * @param files {list of string} the input files
+ * @param r {args.Result} the parsed command line, for `--addr` and the HTML flags
+ * @return {int} `OK` once the server stops
+ * @throws {Error} kind "cli" on `jennifer-tiny`, which has no network; kind
+ *     "httpd" when the address cannot be bound
+ */
+export func serveDeck(files as list of string, r as args.Result) {
+    if (not meta.hasCapability("net")) {
+        throw Error{
+            kind: "cli",
+            message: "serve needs the default `jennifer`; this interpreter has no network",
+            file: "",
+            line: 0,
+            col: 0
+        };
+    }
+    readSources($files);
+    def addr as string init strings.trim(args.asString($r, "addr"));
+    def baseDir as string init dirOf(path.dir($files[0]));
+    def srv as httpd.Server init httpd.listen($addr);
+    if (not args.asBool($r, "quiet")) {
+        io.printf("serving %s at %s (ctrl-c to stop)\n", $files[0], servedUrl($addr));
+    }
+    def token as string init "";
+    def page as string init "";
+    def running as bool init true;
+    while ($running) {
+        def req as httpd.Request init httpd.Request{};
+        try {
+            $req = httpd.accept($srv);
+        } catch (e) {
+            $running = false;
+            continue;
+        }
+        def at as string init httpd.path($req);
+        httpd.setHeader($req, "Cache-Control", "no-store");
+        if ($at == RELOAD_PATH) {
+            httpd.setHeader($req, "Content-Type", "text/plain; charset=utf-8");
+            httpd.respond($req, 200, fingerprint($files));
+            continue;
+        }
+        if ($at == "/" or $at == "/index.html") {
+            def now as string init fingerprint($files);
+            if ($now != $token or $page == "") {
+                $page = servedPage($files, $r);
+                $token = $now;
+            }
+            httpd.setHeader($req, "Content-Type", "text/html; charset=utf-8");
+            httpd.respond($req, 200, $page);
+            continue;
+        }
+        httpd.serveDir($req, $baseDir);
+    }
+    return OK;
+}
+
+/**
+ * Say what was written, unless `--quiet` asked for silence.
+ * @param target {string} the path written
+ * @param n {int} how many bytes it holds
+ * @param count {int} how many slides it covers
+ * @param r {args.Result} the parsed command line, for `--quiet` and `--verbose`
+ */
+export func announceFor(target as string, n as int, count as int, r as args.Result) {
+    if (not args.asBool($r, "quiet")) {
+        announce($target, $n, $count, args.asBool($r, "verbose"));
+    }
 }
 
 /**

@@ -26,6 +26,7 @@ import "./slides.j" as slides;
 import "./theme.j" as theme;
 import "./highlight.j" as highlight;
 import "./mathml.j" as mathml;
+import "./locale.j" as locale;
 
 /** The generator name written into the document's meta tags. */
 export def const GENERATOR as string init "cantrip";
@@ -36,7 +37,7 @@ export def const DEFAULT_TRANSITION as string init "fade";
 /**
  * What the HTML renderer needs beyond the deck itself.
  * @field theme {string} theme name, "" for the deck's own or the default
- * @field mode {string} the mode the page opens in, "light" or "dark"; "" for the
+ * @field mode {string} the mode the page opens in, "light", "dark" or "auto"; "" for the
  *     deck's own or the default
  * @field ratio {string} ratio name, "" for the deck's own or the default
  * @field footer {string} text shown bottom-left on every slide
@@ -49,6 +50,9 @@ export def const DEFAULT_TRANSITION as string init "fade";
  * @field startNotes {string} notes panel at start, "open" or "closed"; "" for the deck's own
  * @field startSlide {string} the slide to open on, 1-based; "" for the deck's own
  * @field startOverview {string} overview at start, "open" or "closed"; "" for the deck's own
+ * @field favicon {string} the page's icon, as the `href` of its
+ *     `<link rel="icon">`: a `data:` URL the caller built from the deck's
+ *     `favicon:` file, or an http(s) URL; "" for none
  * @field embedded {map of string to string} pictures to carry inside the page:
  *     a slide's image target, as the Markdown writes it, to the `data:` URL
  *     that replaces it. The caller fills it with the files plugins generated,
@@ -67,6 +71,7 @@ export def struct Options {
     startNotes as string,
     startSlide as string,
     startOverview as string,
+    favicon as string,
     embedded as map of string to string
 };
 
@@ -102,6 +107,7 @@ export func defaults() {
         startNotes: "",
         startSlide: "",
         startOverview: "",
+        favicon: "",
         embedded: {}
     };
 }
@@ -546,10 +552,22 @@ export func unescapeKbd(text as string) {
  * @return {string} one `<section class="cantrip-slide">` element
  */
 export func section(slide as slides.Slide, total as int, opts as Options) {
+    return sectionIn($slide, $total, $opts, locale.words("en"));
+}
+
+/**
+ * `section`, naming a slide without a heading in the deck's language.
+ * @param slide {slides.Slide} the slide to render
+ * @param total {int} how many slides the deck has, for the counter
+ * @param opts {Options} the caller's options
+ * @param words {locale.Words} the slideshow's words
+ * @return {string} one `<section class="cantrip-slide">` element
+ */
+export func sectionIn(slide as slides.Slide, total as int, opts as Options, words as locale.Words) {
     def out as string init "<section class=\"cantrip-slide\" id=\"cantrip-slide-" +
         convert.toString($slide.number) + "\" data-n=\"" +
         convert.toString($slide.number) + "\" aria-label=\"" +
-        attrValue(label($slide)) + "\">";
+        attrValue(labelIn($slide, $words)) + "\">";
     $out = $out + body($slide, $opts);
     if (strings.trim($opts.footer) != "") {
         $out = $out + "<div class=\"cantrip-slide-footer\">" + html.escape($opts.footer) + "</div>";
@@ -572,10 +590,20 @@ export func section(slide as slides.Slide, total as int, opts as Options) {
  * @return {string} the slide's title, else "Slide N"
  */
 export func label(slide as slides.Slide) {
+    return labelIn($slide, locale.words("en"));
+}
+
+/**
+ * `label` in the deck's language.
+ * @param slide {slides.Slide} the slide to label
+ * @param words {locale.Words} the slideshow's words
+ * @return {string} the slide's title, else the word for a slide and its number
+ */
+export func labelIn(slide as slides.Slide, words as locale.Words) {
     if (strings.trim($slide.title) != "") {
         return $slide.title;
     }
-    return "Slide " + convert.toString($slide.number);
+    return $words.slide + " " + convert.toString($slide.number);
 }
 
 /**
@@ -584,16 +612,17 @@ export func label(slide as slides.Slide) {
  * @return {string} the `<div id="cantrip-overview">` element, hidden by default
  */
 export func overview(deck as slides.Deck) {
+    def words as locale.Words init locale.words(language($deck));
     # Collected and joined once: growing one string per slide copied the
     # whole grid on every pass, quadratic in the slide count.
     def parts as list of string init [
-        "<div id=\"cantrip-overview\" hidden aria-label=\"Slide overview\">"
+        "<div id=\"cantrip-overview\" hidden aria-label=\"" + attrValue($words.overview) + "\">"
     ];
     for (def slide in $deck.slides) {
         $parts[] = "<div class=\"cantrip-thumb\" tabindex=\"0\" role=\"button\" data-go=\"" +
             convert.toString($slide.number) + "\"><div class=\"cantrip-thumb-n\">" +
             convert.toString($slide.number) + "</div><div class=\"cantrip-thumb-t\">" +
-            html.escape(label($slide)) + "</div></div>";
+            html.escape(labelIn($slide, $words)) + "</div></div>";
     }
     $parts[] = "</div>";
     return strings.join($parts, "");
@@ -609,11 +638,24 @@ export func overview(deck as slides.Deck) {
  * @throws {Error} kind "theme" when the theme name is unknown
  */
 export func head(deck as slides.Deck, name as string, s as theme.Stage) {
+    return headWith($deck, $name, $s, "");
+}
+
+/**
+ * `head`, with the page's icon.
+ * @param deck {slides.Deck} the deck, for its title and metadata
+ * @param name {string} the theme name
+ * @param s {theme.Stage} the stage geometry
+ * @param favicon {string} the icon's `href`, "" for none
+ * @return {string} the `<head>` element
+ * @throws {Error} kind "theme" when the theme name is unknown
+ */
+export func headWith(deck as slides.Deck, name as string, s as theme.Stage, favicon as string) {
     def light as theme.Theme init theme.theme($name, "light");
     def dark as theme.Theme init theme.theme($name, "dark");
     def title as string init $deck.title;
     if (strings.trim($title) == "") {
-        $title = "Slides";
+        $title = locale.words(language($deck)).untitled;
     }
     def out as string init "<head><meta charset=\"utf-8\">";
     $out = $out + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
@@ -638,6 +680,9 @@ export func head(deck as slides.Deck, name as string, s as theme.Stage) {
         $out = $out + "<meta name=\"keywords\" content=\"" + attrValue($keywords) + "\">";
     }
     $out = $out + "<title>" + html.escape($title) + "</title>";
+    if ($favicon != "") {
+        $out = $out + "<link rel=\"icon\" href=\"" + attrValue($favicon) + "\">";
+    }
     $out = $out + "<style>" + theme.css($light, $dark, $s) + "</style></head>";
     return $out;
 }
@@ -647,18 +692,35 @@ export func head(deck as slides.Deck, name as string, s as theme.Stage) {
  * @return {string} the `<div id="cantrip-help">` element, hidden by default
  */
 export func helpPanel() {
-    return '<div id="cantrip-help" hidden aria-label="Keyboard shortcuts"><table>' +
-        '<tr><td><kbd>&rarr;</kbd> <kbd>space</kbd> <kbd>n</kbd></td><td>next slide</td></tr>' +
-        '<tr><td><kbd>&larr;</kbd> <kbd>p</kbd></td><td>previous slide</td></tr>' +
-        '<tr><td><kbd>home</kbd> <kbd>end</kbd></td><td>first / last slide</td></tr>' +
-        '<tr><td><kbd>1</kbd>..<kbd>9</kbd> <kbd>enter</kbd></td><td>jump to a slide</td></tr>' +
-        '<tr><td><kbd>o</kbd></td><td>overview</td></tr>' +
-        '<tr><td><kbd>s</kbd></td><td>speaker notes</td></tr>' +
-        '<tr><td><kbd>m</kbd></td><td>light / dark mode</td></tr>' +
-        '<tr><td><kbd>f</kbd></td><td>fullscreen</td></tr>' +
-        '<tr><td><kbd>?</kbd></td><td>this help</td></tr>' +
-        '<tr><td><kbd>esc</kbd></td><td>close an overlay, or go back</td></tr>' +
-        '</table></div>';
+    return helpPanelIn(locale.words("en"));
+}
+
+/**
+ * The keyboard-help overlay in the deck's language.
+ * @param words {locale.Words} the slideshow's words
+ * @return {string} the `<div id="cantrip-help">` element, hidden by default
+ */
+export func helpPanelIn(words as locale.Words) {
+    def rows as list of string init [
+        helpRow('<kbd>&rarr;</kbd> <kbd>space</kbd> <kbd>n</kbd>', $words.nextSlide),
+        helpRow('<kbd>&larr;</kbd> <kbd>p</kbd>', $words.previousSlide),
+        helpRow('<kbd>home</kbd> <kbd>end</kbd>', $words.firstLast),
+        helpRow('<kbd>1</kbd>..<kbd>9</kbd> <kbd>enter</kbd>', $words.jump),
+        helpRow('<kbd>o</kbd>', $words.overviewKey),
+        helpRow('<kbd>s</kbd>', $words.notesKey),
+        helpRow('<kbd>m</kbd>', $words.modeKey),
+        helpRow('<kbd>f</kbd>', $words.fullscreenKey),
+        helpRow('<kbd>?</kbd>', $words.helpKey),
+        helpRow('<kbd>esc</kbd>', $words.escKey)
+    ];
+    return '<div id="cantrip-help" hidden aria-label="' + attrValue($words.shortcuts) +
+        '"><table>' +
+        strings.join($rows, "") + '</table></div>';
+}
+
+# helpRow is one line of the keyboard help: the keys, and what they do.
+func helpRow(keys as string, what as string) {
+    return '<tr><td>' + $keys + '</td><td>' + html.escape($what) + '</td></tr>';
 }
 
 /**
@@ -672,23 +734,38 @@ export func helpPanel() {
  * @return {string} the `<nav id="cantrip-touchbar">` element
  */
 export func touchBar(withNotes as bool) {
+    return touchBarIn($withNotes, locale.words("en"));
+}
+
+/**
+ * The touch bar, labelled in the deck's language.
+ * @param withNotes {bool} whether the page carries the notes panel
+ * @param words {locale.Words} the slideshow's words
+ * @return {string} the `<nav id="cantrip-touchbar">` element
+ */
+export func touchBarIn(withNotes as bool, words as locale.Words) {
     def svg as string init '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
         'stroke-width="2" aria-hidden="true">';
     def parts as list of string init [
-        '<nav id="cantrip-touchbar" aria-label="Slideshow controls">',
-        '<button type="button" data-act="overview" aria-label="Overview">' + $svg +
+        '<nav id="cantrip-touchbar" aria-label="' + attrValue($words.controls) + '">',
+        '<button type="button" data-act="overview" aria-label="' +
+            attrValue($words.overviewButton) +
+            '">' + $svg +
             '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>' +
             '<rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>' +
             '</svg></button>'
     ];
     if ($withNotes) {
-        $parts[] = '<button type="button" data-act="notes" aria-label="Speaker notes">' + $svg +
+        $parts[] = '<button type="button" data-act="notes" aria-label="' + attrValue($words.notes) +
+            '">' + $svg +
             '<path d="M4 6h16M4 12h16M4 18h10"/></svg></button>';
     }
-    $parts[] = '<button type="button" data-act="mode" aria-label="Light or dark mode">' + $svg +
+    $parts[] = '<button type="button" data-act="mode" aria-label="' + attrValue($words.modeButton) +
+        '">' + $svg +
         '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>' +
         '</svg></button>';
-    $parts[] = '<button type="button" data-act="fullscreen" aria-label="Fullscreen">' + $svg +
+    $parts[] = '<button type="button" data-act="fullscreen" aria-label="' +
+        attrValue($words.fullscreenButton) + '">' + $svg +
         '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg></button>';
     $parts[] = "</nav>";
     return strings.join($parts, "");
@@ -713,25 +790,27 @@ export func render(deck as slides.Deck, opts as Options) {
     def total as int init len($deck.slides);
     def options as Options init $opts;
     $options.highlight = pickHighlight($deck, $opts);
+    def words as locale.Words init locale.words(language($deck));
     def parts as list of string init [];
     $parts[] = "<!doctype html>";
     $parts[] = "<html lang=\"" + attrValue(language($deck)) + "\" data-mode=\"" + $mode + "\">";
-    $parts[] = head($deck, $name, $s);
+    $parts[] = headWith($deck, $name, $s, $opts.favicon);
     $parts[] = "<body><div id=\"cantrip-progress\"></div>";
     $parts[] = "<main id=\"cantrip-deck\" data-w=\"" + convert.toString($s.width) + "\" data-h=\"" +
         convert.toString($s.height) + "\" data-transition=\"" + $motion + "\"" +
         startAttributes($start) + ">";
     for (def slide in $deck.slides) {
-        $parts[] = section($slide, $total, $options);
+        $parts[] = sectionIn($slide, $total, $options, $words);
     }
     $parts[] = "</main>";
     $parts[] = overview($deck);
     if ($opts.notes) {
-        $parts[] = '<aside id="cantrip-notes" hidden aria-label="Speaker notes">' +
-            "<h2>Speaker notes</h2><div id=\"cantrip-notes-body\"></div></aside>";
+        $parts[] = '<aside id="cantrip-notes" hidden aria-label="' + attrValue($words.notes) +
+            '" data-empty="' + attrValue($words.noNotes) + '"><h2>' + html.escape($words.notes) +
+            '</h2><div id="cantrip-notes-body"></div></aside>';
     }
-    $parts[] = touchBar($opts.notes);
-    $parts[] = helpPanel();
+    $parts[] = touchBarIn($opts.notes, $words);
+    $parts[] = helpPanelIn($words);
     $parts[] = "<script>" + script() + "</script>";
     $parts[] = "</body></html>";
     return strings.join($parts, "\n") + "\n";
@@ -791,13 +870,20 @@ export func script() {
     var roomy = window.matchMedia("(min-width: 800px) and (min-height: 560px)").matches;
     var startNotes = asked("notes", deck.dataset.notes === "open" && roomy);
     var startOverview = asked("overview", deck.dataset.overview === "open");
-    // The mode the page was built with, unless ?mode=light|dark asks for the
-    // other; m switches it. Both palettes are in the stylesheet.
+    // The mode the page was built with, unless ?mode=light|dark|auto asks for
+    // another; m switches it. Both palettes are in the stylesheet, and "auto"
+    // follows the system setting until m picks one.
     var root = document.documentElement;
     var askedMode = query.get("mode");
-    if (askedMode === "light" || askedMode === "dark") { root.dataset.mode = askedMode; }
+    if (askedMode === "light" || askedMode === "dark" || askedMode === "auto") {
+        root.dataset.mode = askedMode;
+    }
+    function shownMode() {
+        if (root.dataset.mode !== "auto") { return root.dataset.mode; }
+        return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
     function toggleMode() {
-        root.dataset.mode = root.dataset.mode === "dark" ? "light" : "dark";
+        root.dataset.mode = shownMode() === "dark" ? "light" : "dark";
     }
     var startSlide = (parseInt(deck.dataset.slide, 10) || 1) - 1;
 
@@ -809,7 +895,10 @@ export func script() {
     // every step. While it is open the deck ends above it.
     function notesText(i) {
         var src = slides[i].querySelector(":scope > div.cantrip-slide-notes:last-child");
-        return src ? src.innerHTML : "<p>No notes for this slide.</p>";
+        if (src) { return src.innerHTML; }
+        var empty = document.createElement("p");
+        empty.textContent = part("notes").dataset.empty;
+        return empty.outerHTML;
     }
 
     function sizeNotes() {
@@ -1074,5 +1163,68 @@ export func script() {
         window.requestAnimationFrame(function () { deck.classList.add("cantrip-ready"); });
     });
 })();
+';
+}
+
+/**
+ * The script `cantrip serve` adds to the page it serves, and only to that
+ * copy: it asks `path` for the build token every `ms` milliseconds and
+ * reloads the page when the token changes. A file written by `html` or
+ * `build` never carries it.
+ * @param path {string} the token endpoint, such as `/.cantrip-reload`
+ * @param ms {int} the polling interval in milliseconds
+ * @return {string} the JavaScript, without its `<script>` tags
+ */
+export func reloadScript(path as string, ms as int) {
+    return '(function () {
+    "use strict";
+    var seen = null;
+    function poll() {
+        fetch("' + $path +
+        '", { cache: "no-store" }).then(function (r) { return r.text(); })
+            .then(function (t) {
+                if (seen !== null && t !== seen) { location.reload(); return; }
+                seen = t;
+                setTimeout(poll, ' + convert.toString($ms) +
+        ');
+            }, function () { setTimeout(poll, ' + convert.toString($ms) +
+        '); });
+    }
+    poll();
+})();';
+}
+
+/**
+ * Splice a script into a page before its last `</body>`: the slideshow's own
+ * closing tag, which a slide's text cannot produce, since the renderer escapes
+ * it there.
+ * @param page {string} the whole HTML document
+ * @param script {string} the JavaScript to add
+ * @return {string} the page with the script, or with it appended when the page
+ *     has no `</body>`
+ */
+export func withScript(page as string, script as string) {
+    def tag as string init "<script>" + $script + "</script>";
+    def parts as list of string init strings.split($page, "</body>");
+    if (len($parts) < 2) {
+        return $page + $tag;
+    }
+    def at as int init len($page) - len($parts[len($parts) - 1]) - len("</body>");
+    return $page[..$at] + $tag + $page[$at..];
+}
+
+/**
+ * The page `cantrip serve` shows while the deck does not build: the error,
+ * escaped, so the reader sees what to fix, and the next save tries again.
+ * @param message {string} the error message
+ * @return {string} a small HTML document
+ */
+export func errorPage(message as string) {
+    return '<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>cantrip: the deck does not build</title>
+<style>body { font: 16px/1.5 sans-serif; margin: 3em; color: #1a1a1a; background: #fff; }
+pre { white-space: pre-wrap; background: #f4f5f7; padding: 1em; border-left: 4px solid #c0392b; }</style>
+</head><body><h1>The deck does not build</h1><pre>' + html.escape($message) +
+        '</pre><p>Fix the deck and save; this page reloads.</p></body></html>
 ';
 }

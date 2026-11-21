@@ -241,6 +241,8 @@ func testModeInPage() {
     testing.assertContains(render(fixture(), $opts), "data-mode=\"light\">");
     testing.assertContains(render(slides.parse("# H"), defaults()), "data-mode=\"light\">");
     $opts.mode = "auto";
+    testing.assertContains(render(fixture(), $opts), "data-mode=\"auto\">");
+    $opts.mode = "sepia";
     def kind as string init "";
     try {
         render(fixture(), $opts);
@@ -249,6 +251,7 @@ func testModeInPage() {
     }
     testing.assertEqual($kind, "theme");
     def js as string init script();
+    testing.assertContains($js, "prefers-color-scheme: dark");
     testing.assertContains($js, "query.get(\"mode\")");
     testing.assertContains($js, "root.dataset.mode");
 }
@@ -780,4 +783,57 @@ func testEmbedReplacesOnlyTheNamedPicture() {
 func testHighlightedTreeMatchesHighlighted() {
     def md as string init "```js\nconst x = 1;\n```\n";
     testing.assertEqual(highlightedTree(markdown.parse($md), $md, false), highlighted($md, false));
+}
+
+func testTheFaviconGoesInTheHead() {
+    def opts as Options init defaults();
+    $opts.favicon = "data:image/png;base64,AA==";
+    testing.assertContains(
+        render(fixture(), $opts),
+        '<link rel="icon" href="data:image/png;base64,AA==">');
+    testing.assertFalse(strings.contains(render(fixture(), defaults()), 'rel="icon"'));
+    testing.assertContains(
+        headWith(fixture(), "plain", theme.stage("16:9"), "i.png"),
+        'href="i.png"');
+}
+
+# A deck's lang: picks the slideshow's own words.
+func testTheSlideshowSpeaksTheDecksLanguage() {
+    def deck as slides.Deck init slides.parse("---\nlang: de\n---\n# Eins\n\n<!-- notes: x -->\n\n---\n\nText\n");
+    def page as string init render($deck, defaults());
+    testing.assertContains($page, "<td>nächste Folie</td>");
+    testing.assertContains($page, 'aria-label="Steuerung der Präsentation"');
+    testing.assertContains($page, 'aria-label="Folie 2"');
+    testing.assertContains($page, 'data-empty="Keine Notizen zu dieser Folie."');
+    testing.assertContains($page, "<h2>Sprechernotizen</h2>");
+    testing.assertContains($page, 'aria-label="Folienübersicht"');
+    testing.assertContains(
+        render(slides.parse("---\nlang: de\n---\nText\n"), defaults()),
+        "<title>Folien</title>");
+    def w as locale.Words init locale.words("fr");
+    testing.assertEqual(labelIn(slides.parse("Text\n").slides[0], $w), "Diapositive 1");
+    testing.assertContains(helpPanelIn($w), "diapositive suivante");
+    testing.assertContains(touchBarIn(true, $w), "Notes de l&#39;orateur");
+    testing.assertContains(
+        sectionIn(slides.parse("Text\n").slides[0], 1, defaults(), $w),
+        'aria-label="Diapositive 1"');
+}
+
+# --- serve ---------------------------------------------------------------
+
+func testTheReloadScriptGoesBeforeTheLastBodyTag() {
+    def js as string init reloadScript("/.r", 500);
+    testing.assertContains($js, 'fetch("/.r"');
+    testing.assertContains($js, "setTimeout(poll, 500)");
+    def page as string init "<p>&lt;/body&gt;</p></body><!-- x --></body></html>";
+    def got as string init withScript($page, "X");
+    testing.assertTrue(strings.endsWith($got, "</body><!-- x --><script>X</script></body></html>"));
+    testing.assertEqual(withScript("<p>no tag</p>", "Y"), "<p>no tag</p><script>Y</script>");
+}
+
+func testTheErrorPageEscapesTheMessage() {
+    def page as string init errorPage("unknown theme \"<b>\"");
+    testing.assertContains($page, "The deck does not build");
+    testing.assertContains($page, "&lt;b&gt;");
+    testing.assertFalse(strings.contains($page, "<b>\""));
 }
