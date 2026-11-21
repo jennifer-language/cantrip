@@ -275,6 +275,10 @@ Only a paragraph that is a single image is drawn into the PDF. An image inline
 in a sentence, in a list item, in a quote, or in a table cell keeps the `[alt]`
 fallback.
 
+A picture a [plugin](plugins.md#generated-pictures) generated is linked as
+`_generated/NAME/FILE` and is the exception to both rules: the slideshow
+carries it inside the page, and the PDF draws the PNG beside an SVG.
+
 ## Raw HTML is escaped
 
 Raw HTML in the source renders as visible text, not markup. That is the right
@@ -284,7 +288,11 @@ verbatim passthrough in the HTML output, for block HTML such as a `<div>` on
 lines of its own and for inline tags inside a paragraph alike. Speaker notes
 stay escaped either way. The PDF renderer has no HTML at all.
 
-The one exception is the key cap. `<kbd>Esc</kbd>` renders as a key in the
+MathML is not raw HTML: a `<math>` element in the MathML namespace, with
+nothing in it that can run or fetch, reaches the slideshow as markup either
+way, and the PDF prints its TeX source. See [Plugins](plugins.md#mathml).
+
+The other exception is the key cap. `<kbd>Esc</kbd>` renders as a key in the
 slideshow and as the key's name in the PDF, with or without `--raw-html`.
 Without `--raw-html` only the bare tag is recognised - one with attributes stays
 text - and inside a code span or a fenced block it stays as written, so you can

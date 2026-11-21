@@ -31,6 +31,12 @@ footer. The page itself stays white whatever the screen theme is, because this
 is the artifact that gets printed; a slide that outgrows its page continues onto
 the next, and the tool says so rather than letting you find out on a projector.
 
+**Plugins** extend a deck before it renders: diagrams drawn from a `mermaid`
+fence, maths typeset by KaTeX, anything a program can do to Markdown. Cantrip
+speaks Grimoire's plugin contract, so Grimoire's preprocessors - such as
+`grimoire-mermaid` and `grimoire-katex` - run over a deck unchanged. A deck
+names them in [`cantrip.toml`](plugins.md); nothing runs that the file does not name.
+
 ## What it is built on
 
 `cantrip` is written in [Jennifer](https://jennifer-lang.dev/) and leans on
@@ -71,6 +77,7 @@ slideshow for the speaker notes, which tell the story.
 | [The slide format](format.md) | front matter, separators, notes, and what Markdown is supported |
 | [The command line](usage.md) | every verb and flag |
 | [Themes, ratios, and transitions](themes.md) | the themes, Grimoire's included, the ratios, the slide transitions, and how the PDF differs |
+| [Plugins](plugins.md) | preprocessors in `cantrip.toml`: diagrams, maths, Grimoire's plugins |
 | [Working on Cantrip](development.md) | the source layout, the gate, and the release process |
 
 ## License

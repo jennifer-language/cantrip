@@ -17,6 +17,7 @@ One command with five verbs. `cantrip --help` prints the same list, and
 | `handout` | three slides to an A4 portrait page, with room for notes | `<input>-handout.pdf` |
 | `highlight` | source files as highlighted HTML, for code shown outside a deck | standard output, or `<dir>/<file>.html` |
 | `info` | report the deck's shape | nothing |
+| `plugins` | list the [plugins](plugins.md) the deck would run, and where each program came from | nothing |
 | `themes` | list the themes, ratios, and transitions | nothing |
 
 ```sh
@@ -58,6 +59,18 @@ the slides, `--theme` and `--ratio` change the slides themselves. A slide that
 overflows its page in `pdf` overflows in the handout too, and gets the same
 warning.
 
+`--notes-beside` prints each slide's speaker notes in that column instead: at
+the top, wrapped to its width in a small type, with the ruled lines in the room
+left below. Notes longer than the slide is tall are cut, ending in "...". The
+notes are printed as plain text - a blank line starts a new paragraph, and
+Markdown markup stays as written - and they are not printed under the slides as
+well, whatever `--notes` says. A copy for the presenter, or for a reader who
+was not in the room:
+
+```sh
+cantrip handout talk.md --notes-beside -o talk-notes.pdf
+```
+
 ## Options
 
 | Option | Does | Default |
@@ -70,6 +83,7 @@ warning.
 | `-f`, `--footer TEXT` | text at the foot of every slide | none |
 | `--bookmarks N` | PDF outline depth, 0 for none | `2` |
 | `-n`, `--notes` | put speaker notes **into** the PDF | off |
+| `--notes-beside` | handout: print each slide's speaker notes in the column beside it | off |
 | `--no-notes` | leave speaker notes **out of** the HTML | off |
 | `--notes-panel open\|closed` | HTML: the speaker-notes panel open or closed when the page opens | the deck's `notes:`, else `closed` |
 | `--start-slide N` | HTML: the slide the page opens on, from 1 | the deck's `slide:`, else `1` |

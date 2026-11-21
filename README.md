@@ -70,6 +70,12 @@ deck's metadata, a bookmark outline from the headings, and a running footer.
 The page stays white whatever the screen theme is, because this is the artifact
 that gets printed - so a dark deck still gives a legible handout.
 
+**Plugins** extend a deck before it renders: diagrams drawn from a `mermaid`
+fence, maths typeset by KaTeX, anything a program can do to Markdown. Cantrip
+speaks Grimoire's plugin contract, so Grimoire's preprocessors - such as
+`grimoire-mermaid` and `grimoire-katex` - run over a deck unchanged. A deck
+names them in `cantrip.toml`; nothing runs that the file does not name.
+
 ## Install
 
 ```sh
@@ -99,12 +105,14 @@ cd cantrip
 | `handout` | three slides to an A4 page, with room for notes |
 | `highlight` | source files as highlighted HTML fragments |
 | `info` | report the deck's shape, writing nothing |
+| `plugins` | list the plugins the deck would run, and where each came from |
 | `themes` | list the themes, ratios, and transitions |
 
 ```sh
 cantrip html talk.md --no-notes -o public/talk.html   # for the attendees
 cantrip pdf  talk.md --notes -o talk-presenter.pdf    # for you
 cantrip handout talk.md                               # to print for the room
+cantrip handout talk.md --notes-beside                # with your notes beside each slide
 cantrip build talk.md --theme contrast --ratio 4:3    # for a bad projector
 cantrip info talk.md                                  # what is in there
 ```
@@ -131,6 +139,7 @@ a [Grimoire](https://grimoire.jennifer-lang.dev/) book, built with
 | [The slide format](docs/format.md) | front matter, separators, notes, supported Markdown |
 | [The command line](docs/usage.md) | every verb and flag, and the exit codes |
 | [Themes, ratios, and transitions](docs/themes.md) | the themes, Grimoire's included, and how the PDF differs |
+| [Plugins](docs/plugins.md) | preprocessors in `cantrip.toml`, Grimoire's included |
 | [Working on Cantrip](docs/development.md) | the layout, the gate, the release process |
 
 ## Example presentations

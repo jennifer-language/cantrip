@@ -5,4 +5,5 @@
 - [The slide format](format.md)
 - [The command line](usage.md)
 - [Themes, ratios, and transitions](themes.md)
+- [Plugins](plugins.md)
 - [Working on Cantrip](development.md)
