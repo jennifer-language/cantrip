@@ -18,6 +18,7 @@ One command with five verbs. `cantrip --help` prints the same list, and
 | `highlight` | source files as highlighted HTML, for code shown outside a deck | standard output, or `<dir>/<file>.html` |
 | `info` | report the deck's shape | nothing |
 | `plugins` | list the [plugins](plugins.md) the deck would run, and where each program came from | nothing |
+| `serve` | show the deck in a browser while you write it; the page reloads when you save | nothing |
 | `themes` | list the themes, ratios, and transitions | nothing |
 
 ```sh
@@ -71,13 +72,32 @@ was not in the room:
 cantrip handout talk.md --notes-beside -o talk-notes.pdf
 ```
 
+### Previewing while you write
+
+`serve` shows the slideshow in a browser and reloads it whenever the deck
+changes:
+
+```sh
+cantrip serve talk.md                   # http://127.0.0.1:8080/
+cantrip serve talk.md --addr :9000      # another port, every interface
+```
+
+The slideshow is built when the browser asks for it, exactly as `html` builds
+it, plugins included, so the page is always the deck on disk. A small script in
+the served copy (and only there) polls for changes to the deck, its
+`cantrip.toml` and the files beside it, and reloads the page. A deck that does
+not build shows the error instead, and comes back with the next save. Pictures
+beside the deck are served from its directory. Nothing is written to disk; stop
+it with <kbd>Ctrl</kbd>+<kbd>C</kbd>. It needs the default `jennifer`, since
+`jennifer-tiny` has no network.
+
 ## Options
 
 | Option | Does | Default |
 | ------ | ---- | ------- |
 | `-o`, `--out PATH` | where to write | beside the input |
 | `-t`, `--theme NAME` | override the deck's theme | the deck's, else `plain` |
-| `--mode light\|dark` | HTML: the mode the page opens in | the deck's `mode:`, else `light` |
+| `--mode light\|dark\|auto` | HTML: the mode the page opens in; `auto` follows the viewer's system | the deck's `mode:`, else `light` |
 | `-r`, `--ratio NAME` | override the deck's ratio | the deck's, else `16:9` |
 | `--transition NAME` | override the deck's HTML slide transition | the deck's, else `fade` |
 | `-f`, `--footer TEXT` | text at the foot of every slide | none |
@@ -91,6 +111,8 @@ cantrip handout talk.md --notes-beside -o talk-notes.pdf
 | `--no-numbers` | omit slide numbers | off |
 | `--raw-html` | pass raw HTML through unescaped | off |
 | `-v`, `--verbose` | report byte counts, and each image skipped and why | off |
+| `-a`, `--addr ADDR` | `serve`: the address to listen on | `127.0.0.1:8080` |
+| `-q`, `--quiet` | print nothing on success; warnings and errors still go to standard error | off |
 
 `--flag=value` and `--flag value` both work, short flags bundle (`-nv`), and
 `--` ends the options.
@@ -215,8 +237,8 @@ While the overview is open, the bar stays.
 The current slide is in the URL fragment (`talk.html#4`), so a reload keeps your
 place and you can link to a slide. `?notes=1` / `?notes=0` and `?overview=1` /
 `?overview=0` in the URL open or close the notes panel and the overview when
-the page loads (`talk.html?notes=0#4`), and `?mode=light` / `?mode=dark` pick
-the mode, whatever the deck was built with. While
+the page loads (`talk.html?notes=0#4`), and `?mode=light` / `?mode=dark` /
+`?mode=auto` pick the mode, whatever the deck was built with. While
 the notes panel is open, the slide is scaled into the space above it. The slide scales to the window, so the deck
 looks the same on a laptop and a projector.
 

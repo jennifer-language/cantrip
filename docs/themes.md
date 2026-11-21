@@ -49,9 +49,11 @@ changes the colours and nothing else.
 ## Light and dark mode
 
 The deck's author picks the theme and the mode the slideshow opens in:
-`mode: light` (the default) or `mode: dark`, or `--mode` for one run. Whoever
-watches can switch it: <kbd>m</kbd> flips between light and dark, and
-`?mode=light` or `?mode=dark` in the URL opens the page in that mode. The room
+`mode: light` (the default), `mode: dark`, or `mode: auto`, which follows the
+light or dark setting of the viewer's system, or `--mode` for one run. Whoever
+watches can switch it: <kbd>m</kbd> flips between light and dark (from `auto`,
+to the one the system is not showing), and `?mode=light`, `?mode=dark` or
+`?mode=auto` in the URL opens the page in that mode. The room
 decides what reads best, so the choice stays with the person in front of the
 screen. Both palettes are in the page, so the switch needs no reload and works
 offline.

@@ -106,6 +106,7 @@ cd cantrip
 | `highlight` | source files as highlighted HTML fragments |
 | `info` | report the deck's shape, writing nothing |
 | `plugins` | list the plugins the deck would run, and where each came from |
+| `serve` | preview the deck in a browser, reloading when you save |
 | `themes` | list the themes, ratios, and transitions |
 
 ```sh
@@ -115,13 +116,15 @@ cantrip handout talk.md                               # to print for the room
 cantrip handout talk.md --notes-beside                # with your notes beside each slide
 cantrip build talk.md --theme contrast --ratio 4:3    # for a bad projector
 cantrip info talk.md                                  # what is in there
+cantrip serve talk.md                                 # preview while you write
 ```
 
 `cantrip --help` lists every flag, and `cantrip themes` every theme. There are
 13 of them, each with a light and a dark palette: Cantrip's own `plain`,
 `solar`, and `contrast`, plus all ten [Grimoire](https://grimoire.jennifer-lang.dev/)
 themes under their own names, so a talk can match the manual beside it. The
-deck sets the mode it opens in (`mode: light` or `mode: dark`); whoever watches
+deck sets the mode it opens in (`mode: light`, `mode: dark`, or `mode: auto` to
+follow the viewer's system); whoever watches
 switches it with <kbd>m</kbd>. Three ratios
 (`16:9`, `16:10`, `4:3`), and four slide transitions (`fade`, `slide`, `zoom`,
 `none`).

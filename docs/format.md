@@ -67,16 +67,17 @@ swallow the deck.
 | `author` | an HTML `author` meta tag, the PDF author | none |
 | `date` | an HTML `date` meta tag | none |
 | `theme` | which [theme](themes.md) to render with | `plain` |
-| `mode` | whether the HTML opens in the theme's `light` or `dark` palette; the viewer switches with <kbd>m</kbd>, and the PDF always prints light | `light` |
+| `mode` | whether the HTML opens in the theme's `light` or `dark` palette, or `auto`: whichever the viewer's system prefers; the viewer switches with <kbd>m</kbd>, and the PDF always prints light | `light` |
 | `ratio` | which [aspect ratio](themes.md#ratios) to lay out on | `16:9` |
 | `description` | the HTML `description` meta tag, what a search engine shows | the `subject` |
 | `subject` | the PDF subject, and the HTML description when there is no `description` | none |
 | `keywords` | the PDF keywords and the HTML `keywords` meta tag | none |
 | `transition` | which [slide transition](themes.md#transitions) the HTML uses | `fade` |
-| `lang` | the HTML `lang` attribute | `en` |
+| `lang` | the HTML `lang` attribute, and the language of the slideshow's own words (the help, the touch bar, the notes panel): `de`, `es`, `fr`, `it`, `ja`, `nl`, `pl`, `pt`, `ru`, `zh`, else English; only the language counts, so `pt-BR` is Portuguese | `en` |
 | `notes` | whether the HTML's speaker-notes panel is `open` or `closed` when the page opens | `closed` |
 | `slide` | the slide the HTML opens on, from 1 | `1` |
 | `overview` | whether the HTML opens in the slide overview, `open` or `closed` | `closed` |
+| `favicon` | the slideshow's icon: a `.png`, `.svg`, `.ico`, `.gif` or `.jpg` beside the deck, carried inside the page, or an `https://` URL linked as written; a file that is missing or outside the deck's directory stops the build | none |
 | `highlight` | whether [code blocks are highlighted](#code-is-highlighted-when-the-deck-is-built), `true` or `false`; anything else fails the build | `true` |
 
 Values may be quoted or bare: `title: "A Deck"` and `title: A Deck` agree. A
@@ -275,9 +276,13 @@ Only a paragraph that is a single image is drawn into the PDF. An image inline
 in a sentence, in a list item, in a quote, or in a table cell keeps the `[alt]`
 fallback.
 
+The PDF draws no SVG. For `![x](fig.svg)` it draws `fig.png` from beside
+`fig.svg`, so an SVG picture needs a PNG copy next to it to appear in the PDF;
+without one the PDF shows the alt text. The slideshow shows the SVG itself.
+
 A picture a [plugin](plugins.md#generated-pictures) generated is linked as
-`_generated/NAME/FILE` and is the exception to both rules: the slideshow
-carries it inside the page, and the PDF draws the PNG beside an SVG.
+`_generated/NAME/FILE`, and the slideshow carries it inside the page rather
+than linking it.
 
 ## Raw HTML is escaped
 
