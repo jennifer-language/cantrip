@@ -37,6 +37,7 @@ import "pdf.j" as pdf;
 import "./slides.j" as slides;
 import "./theme.j" as theme;
 import "./highlight.j" as highlight;
+import "./mathml.j" as mathml;
 
 /** The application name written into the PDF's Creator field. */
 export def const CREATOR as string init "cantrip";
@@ -333,6 +334,12 @@ export def const HANDOUT_TITLE_SPACE as int init 22;
 /** The handout title's font size, in points. */
 export def const HANDOUT_TITLE_SIZE as int init 11;
 
+/** The font size of speaker notes printed beside a handout slide, in points. */
+export def const HANDOUT_NOTE_SIZE as int init 8;
+
+/** The distance between two lines of printed notes, in points. */
+export def const HANDOUT_NOTE_LEADING as int init 10;
+
 /**
  * A handout: the slide pages, three to an A4 portrait page.
  *
@@ -352,6 +359,32 @@ export func handout(
     s as theme.Stage,
     title as string,
     label as pdf.PageLabel) {
+    return handoutWith($doc, $s, $title, $label, []);
+}
+
+/**
+ * A handout with each slide's speaker notes printed beside it.
+ *
+ * The notes take the top of the column the ruled lines are drawn in, wrapped to
+ * its width in a small sans-serif, and the lines fill the room left below them,
+ * for the reader's own notes. Notes longer than the slide is tall are cut, the
+ * last line ending in "...". Where a ratio leaves no column, nothing is printed
+ * beside the slides, as with `handout`.
+ * @param doc {pdf.Document} the slide document from `document`, one page per
+ *     slide; render it without notes, since they are printed beside it
+ * @param s {theme.Stage} the stage the slides were printed at
+ * @param title {string} the title over each page's first slide, "" for none
+ * @param label {pdf.PageLabel} the handout's running footer
+ * @param notes {list of string} each slide's notes, by slide; "" or a missing
+ *     entry leaves that slide's column ruled only
+ * @return {pdf.Document} the handout document
+ */
+export func handoutWith(
+    doc as pdf.Document,
+    s as theme.Stage,
+    title as string,
+    label as pdf.PageLabel,
+    notes as list of string) {
     def top as int init HANDOUT_HEIGHT - HANDOUT_MARGIN;
     def heading as string init fitTitle(pdf.toWinAnsi(strings.trim($title), "?"));
     if ($heading != "") {
@@ -378,6 +411,7 @@ export func handout(
         def fonts as list of string init [];
         def glyphs as list of pdf.GlyphUse init [];
         def links as list of pdf.LinkAnnot init [];
+        def written as list of NoteLine init [];
         def count as int init 0;
         for (def k in 0..HANDOUT_PER_PAGE) {
             def i as int init $n * HANDOUT_PER_PAGE + $k;
@@ -393,7 +427,9 @@ export func handout(
             $body = $body + "q 0.5 w 0.6 0.6 0.6 RG " + num($x) + " " + num($y) + " " + num($w) +
                 " " + num($h) + " re S Q\n";
             if ($withNotes) {
-                $body = $body + noteLines($notesX, $y, $h);
+                def col as Column init noteColumn(noteAt($notes, $i), $notesX, $y, $h);
+                $body = $body + $col.ops;
+                $written = lists.concat($written, $col.lines);
             }
             for (def f in $pg.fonts) {
                 if (not lists.contains($fonts, $f)) {
@@ -427,6 +463,18 @@ export func handout(
                 HANDOUT_TITLE_SIZE,
                 $heading);
         }
+        if (len($written) > 0) {
+            $sheet = pdf.color($sheet, 50, 50, 50);
+            for (def line in $written) {
+                $sheet = pdf.text(
+                    $sheet,
+                    $line.x,
+                    $line.y,
+                    "Helvetica",
+                    HANDOUT_NOTE_SIZE,
+                    $line.text);
+            }
+        }
         $sheet = pdf.color($sheet, 110, 110, 110);
         # Each slide's number sits under its right edge, clear of the footer
         # text that starts at the left margin under the last slide.
@@ -457,6 +505,153 @@ export func handout(
     $out.footerOn = false;
     if ($label.left != "" or $label.right != "") {
         $out = pdf.setFooter($out, $label);
+    }
+    return $out;
+}
+
+# One line of notes on a handout sheet, placed in points.
+def struct NoteLine {
+    x as int,
+    y as int,
+    text as string
+};
+
+# What one slide's column holds: the ruled-line drawing operators, and the
+# lines of notes to print over them.
+def struct Column {
+    ops as string,
+    lines as list of NoteLine
+};
+
+# noteAt is slide i's notes, or "" past the end of the list.
+func noteAt(notes as list of string, i as int) {
+    if ($i < len($notes)) {
+        return $notes[$i];
+    }
+    return "";
+}
+
+# noteColumn lays one slide's notes out at the top of its column, from notesX
+# to the right margin beside a slide whose bottom edge is at y and which is h
+# points high, and rules the room left below them.
+func noteColumn(note as string, notesX as float, y as float, h as float) {
+    def text as list of string init noteLayout(
+        $note,
+        convert.toFloat(HANDOUT_WIDTH - HANDOUT_MARGIN) - $notesX,
+        $h);
+    def lines as list of NoteLine init [];
+    for (def j in 0..len($text)) {
+        $lines[] = NoteLine{
+            x: convert.toInt(math.round($notesX)),
+            y: convert.toInt(math.round($y + $h)) - HANDOUT_NOTE_SIZE - $j * HANDOUT_NOTE_LEADING,
+            text: $text[$j]
+        };
+    }
+    def used as float init 0.0;
+    if (len($text) > 0) {
+        $used = convert.toFloat(len($text) * HANDOUT_NOTE_LEADING) +
+            convert.toFloat(HANDOUT_NOTE_LEADING) / 2.0;
+    }
+    return Column{ops: noteLines($notesX, $y, $h - $used), lines: $lines};
+}
+
+/**
+ * Speaker notes as the lines a handout prints beside a slide.
+ *
+ * The notes are plain text here: a blank line starts a paragraph, other line
+ * breaks are spaces, and a paragraph is wrapped to `width` at
+ * `HANDOUT_NOTE_SIZE`. A word wider than the column is broken where it has to
+ * be. Lines that do not fit `height` are dropped, the last one kept ending in
+ * "...". Text outside WinAnsi prints as "?", as everywhere in the PDF.
+ * @param notes {string} the slide's notes
+ * @param width {float} the column width, in points
+ * @param height {float} the room down the column, in points
+ * @return {list of string} the lines, top to bottom
+ */
+export func noteLayout(notes as string, width as float, height as float) {
+    def out as list of string init [];
+    def room as int init convert.toInt(math.floor($height / convert.toFloat(HANDOUT_NOTE_LEADING)));
+    if ($room <= 0 or strings.trim($notes) == "") {
+        return $out;
+    }
+    def all as list of string init [];
+    for (def para in paragraphs(pdf.toWinAnsi($notes, "?"))) {
+        if (len($all) > 0) {
+            $all[] = "";
+        }
+        for (def line in wrapped($para, $width)) {
+            $all[] = $line;
+        }
+    }
+    if (len($all) <= $room) {
+        return $all;
+    }
+    $out = $all[..$room];
+    def last as string init $out[$room - 1];
+    while ($last != "" and fits($last + "...", $width) == false) {
+        $last = $last[..len($last) - 1];
+    }
+    $out[$room - 1] = strings.trim($last) + "...";
+    return $out;
+}
+
+# paragraphs splits notes at blank lines and joins each paragraph's lines.
+func paragraphs(text as string) {
+    def out as list of string init [];
+    def current as list of string init [];
+    for (def line in strings.split($text, "\n")) {
+        def bare as string init strings.trim($line);
+        if ($bare == "") {
+            if (len($current) > 0) {
+                $out[] = strings.join($current, " ");
+                $current = [];
+            }
+            continue;
+        }
+        $current[] = $bare;
+    }
+    if (len($current) > 0) {
+        $out[] = strings.join($current, " ");
+    }
+    return $out;
+}
+
+# fits says whether text is no wider than width at the notes' size.
+func fits(text as string, width as float) {
+    return convert.toFloat(pdf.measureText("Helvetica", HANDOUT_NOTE_SIZE, $text)) <= $width;
+}
+
+# wrapped breaks one paragraph into lines no wider than width.
+func wrapped(para as string, width as float) {
+    def out as list of string init [];
+    def line as string init "";
+    for (def word in strings.split($para, " ")) {
+        if ($word == "") {
+            continue;
+        }
+        def tried as string init $word;
+        if ($line != "") {
+            $tried = $line + " " + $word;
+        }
+        if (fits($tried, $width)) {
+            $line = $tried;
+            continue;
+        }
+        if ($line != "") {
+            $out[] = $line;
+        }
+        $line = $word;
+        while (not fits($line, $width) and len($line) > 1) {
+            def cut as int init len($line) - 1;
+            while ($cut > 1 and not fits($line[..$cut], $width)) {
+                $cut = $cut - 1;
+            }
+            $out[] = $line[..$cut];
+            $line = $line[$cut..];
+        }
+    }
+    if ($line != "") {
+        $out[] = $line;
     }
     return $out;
 }
@@ -1044,6 +1239,27 @@ export func paintCode(
 }
 
 /**
+ * A parsed deck with its maths made printable.
+ *
+ * The layout draws text, not MathML, and drops raw HTML without a word, so each
+ * MathML element becomes the TeX source it carries, in monospace: a code span
+ * inline, and centred lines for display maths. A deck without maths is handed
+ * back untouched.
+ * @param tree {doctree.Node} the parsed deck
+ * @param lay {doctree.PdfOptions} the layout, for the column and the mono font
+ * @return {doctree.Node} the tree to lay out
+ */
+export func printableMaths(tree as doctree.Node, lay as doctree.PdfOptions) {
+    if (not mathml.holds($tree)) {
+        return $tree;
+    }
+    def column as float init convert.toFloat($lay.pageWidth - 2 * $lay.margin);
+    def glyph as float init pdf.measureText($lay.monoFont, $lay.bodySize, "0");
+    def chars as int init math.floor($column / $glyph);
+    return mathml.rewrite($tree, "tex", $chars).node;
+}
+
+/**
  * Lay a deck out as a finished PDF document, ready to serialise.
  *
  * Slides are laid out as one document with a page break between them, so a
@@ -1060,8 +1276,8 @@ export func paintCode(
  */
 export func document(deck as slides.Deck, opts as Options) {
     def source as string init slides.kbdToCode(slides.toMarkdown($deck, $opts.notes));
-    def tree as doctree.Node init markdown.parse($source);
     def lay as doctree.PdfOptions init layout($deck, $opts);
+    def tree as doctree.Node init printableMaths(markdown.parse($source), $lay);
     def laid as pdf.Document;
     if (pickHighlight($deck, $opts)) {
         def real as doctree.Fill init $lay.codeFill;

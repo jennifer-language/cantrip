@@ -737,3 +737,47 @@ func testNotesStayPlain() {
     testing.assertContains($got, "cantrip-slide-notes");
     testing.assertFalse(strings.contains($got, "hljs-"));
 }
+
+# --- MathML and embedded pictures --------------------------------------
+
+def const MATH as string init '<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>x</mi><annotation encoding="application/x-tex">x^2</annotation></math>';
+
+# MathML reaches the slideshow as markup without --raw-html, inline and as a
+# block, while other raw HTML on the same slide stays escaped.
+func testMathMlPassesThroughAndRawHtmlDoesNot() {
+    def slide as slides.Slide init slides.parse(
+        "# M\n\nInline " + MATH +
+            " here, <b>bold</b>.\n\n<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\">\n<mi>y</mi></math>\n").slides[0];
+    def got as string init body($slide, defaults());
+    testing.assertContains($got, "Inline " + MATH + " here");
+    testing.assertContains(
+        $got,
+        '<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">');
+    testing.assertContains($got, "&lt;b&gt;bold&lt;/b&gt;");
+    def plain as Options init defaults();
+    $plain.highlight = false;
+    testing.assertContains(body($slide, $plain), "Inline " + MATH + " here");
+}
+
+func testWithMathsUnwrapsABlock() {
+    def mark as string init mathml.placeholder(0);
+    testing.assertEqual(withMaths("<p>" + $mark + "</p>", ["<math/>"]), "<math/>");
+    testing.assertEqual(withMaths("a " + $mark + " b", ["<m/>"]), "a <m/> b");
+    testing.assertEqual(withMaths("none", []), "none");
+}
+
+func testEmbedReplacesOnlyTheNamedPicture() {
+    def html as string init '<img src="_generated/m/a.svg" alt=""><img src="b.png" alt="">';
+    def got as string init embed($html, {"_generated/m/a.svg": "data:image/svg+xml;base64,AA=="});
+    testing.assertContains($got, 'src="data:image/svg+xml;base64,AA=="');
+    testing.assertContains($got, 'src="b.png"');
+    def slide as slides.Slide init slides.parse("# P\n\n![a](_generated/m/a.svg)\n").slides[0];
+    def opts as Options init defaults();
+    $opts.embedded = {"_generated/m/a.svg": "data:image/png;base64,AA=="};
+    testing.assertContains(body($slide, $opts), 'src="data:image/png;base64,AA=="');
+}
+
+func testHighlightedTreeMatchesHighlighted() {
+    def md as string init "```js\nconst x = 1;\n```\n";
+    testing.assertEqual(highlightedTree(markdown.parse($md), $md, false), highlighted($md, false));
+}

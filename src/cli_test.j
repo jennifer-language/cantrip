@@ -18,6 +18,7 @@ use maps;
 use binary;
 use encoding;
 use os;
+use json;
 
 /** A small deck, written to a temporary file by `writeDeck`. */
 func sample() {
@@ -110,7 +111,8 @@ func testCommands() {
     testing.assertContains(commands(), "info");
     testing.assertContains(commands(), "themes");
     testing.assertContains(commands(), "highlight");
-    testing.assertEqual(len(commands()), 7);
+    testing.assertContains(commands(), "plugins");
+    testing.assertEqual(len(commands()), 8);
 }
 
 /** The parser accepts every flag the help text advertises. */
@@ -892,4 +894,245 @@ func testHighlightFilesStaysBelowOut() {
         $kind = $e.kind;
     }
     testing.assertEqual($kind, "cli");
+}
+
+# --- preprocessors -----------------------------------------------------
+
+# A plugin in Jennifer, run through `jennifer run`: it checks the request the
+# way a Grimoire plugin would, draws a picture into `plugin.files` (an SVG and
+# the PNG beside it), and rewrites DIAGRAM and MATHS on the first file.
+def const FAKE_PLUGIN as list of string init [
+    'use io;',
+    'use json;',
+    'use fs;',
+    'use path;',
+    'use strings;',
+    'use images;',
+    'use convert;',
+    'def req as json.Value init json.decode(strings.join(io.readLines(), "\n"));',
+    'if (json.asInt($req, "/api") != 1 or json.asString($req, "/kind") != "preprocessor" or',
+    '    json.asString($req, "/features/0") != "files" or',
+    '    json.asString($req, "/plugin/settings/colour") != "red") {',
+    '    io.eprintf("fake: unexpected request\n");',
+    '    exit 3;',
+    '}',
+    'def files as string init json.asString($req, "/plugin/files");',
+    'fs.writeString(path.join($files, "d.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"/>");',
+    'fs.writeBytes(path.join($files, "d.png"), images.encode("png", images.create(4, 4)));',
+    'def text as string init json.asString($req, "/chapters/0/content");',
+    '$text = strings.replace($text, "DIAGRAM", "![d](_generated/fake/d.svg)");',
+    '$text = strings.replace($text, "MATHS", MATHS_ELEMENT);',
+    'def open as string init convert.fromCodepoint(123);',
+    'def close as string init convert.fromCodepoint(125);',
+    'def src as string init json.encode(json.asString($req, "/chapters/0/src"));',
+    'io.printf("%s", $open + "\"api\":1,\"chapters\":[" + $open + "\"src\":" + $src +',
+    '    ",\"content\":" + json.encode($text) + $close + "]" + $close);'
+];
+
+def const MATHS_ELEMENT as string init '<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>x</mi>' +
+    '<annotation encoding="application/x-tex">x^2</annotation></math>';
+
+# pluginDeck writes a deck, the fake plugin and a cantrip.toml naming it.
+func pluginDeck(dir as string) {
+    def program as string init strings.replace(
+        strings.join(FAKE_PLUGIN, "\n") + "\n",
+        "MATHS_ELEMENT",
+        json.encode(MATHS_ELEMENT));
+    fs.writeString(path.join($dir, "fake.j"), $program);
+    fs.writeString(
+        path.join($dir, "cantrip.toml"),
+        "[preprocessor.fake]\n" + 'command = "jennifer"' + "\n" +
+            'args = ["run", ' + json.encode(path.join($dir, "fake.j")) + ']' + "\n" +
+            'colour = "red"' + "\n");
+    return writeDeck(
+        $dir,
+        "---\ntitle: Plugged\nauthor: Ada\nlang: en\n---\n# One\n\nDIAGRAM\n\n---\n\n## Two\n\nInline MATHS here.\n",
+        "talk.md");
+}
+
+# scratchCount is how many preprocessor scratch directories exist.
+func scratchCount() {
+    def n as int init 0;
+    for (def name in fs.list(os.tempDir())) {
+        if (strings.startsWith($name, "cantrip-plugins-")) {
+            $n = $n + 1;
+        }
+    }
+    return $n;
+}
+
+func testPreprocessorsRewriteTheDeckAndDrawItsPictures() {
+    def dir as string init fs.realpath(fs.makeTempDir());
+    defer fs.removeAll($dir);
+    def target as string init pluginDeck($dir);
+    def out as string init path.join($dir, "out");
+    def before as int init scratchCount();
+    testing.assertEqual(run(["cantrip", "build", $target, "-o", $out]), OK);
+    testing.assertEqual(scratchCount(), $before);
+    def page as string init fs.readString($out + ".html");
+    testing.assertContains($page, 'src="data:image/svg+xml;base64,');
+    testing.assertFalse(strings.contains($page, "_generated/fake/d.svg"));
+    testing.assertContains($page, '<math xmlns="http://www.w3.org/1998/Math/MathML">');
+    testing.assertFalse(strings.contains($page, "DIAGRAM"));
+    def printed as bytes init fs.readBytes($out + ".pdf");
+    testing.assertEqual(encoding.decode("utf-8", $printed[..4]), "%PDF");
+    testing.assertFalse(fs.exists(path.join($dir, "_generated")));
+}
+
+func testTheScratchDirectoryIsRemoved() {
+    def dir as string init fs.realpath(fs.makeTempDir());
+    defer fs.removeAll($dir);
+    def target as string init pluginDeck($dir);
+    def pre as Preprocessed init preprocess(readSources([$target]), $dir, $dir, false);
+    testing.assertTrue(fs.isFile(path.join($pre.root, "_generated/fake/d.png")));
+    testing.assertContains($pre.sources[0].content, "](_generated/fake/d.svg)");
+    def deck as slides.Deck init deckFrom($pre.sources);
+    def images as map of string to pdf.Image init loadImagesWith($deck, $dir, false, $pre.root);
+    testing.assertTrue(maps.has($images, "_generated/fake/d.svg"));
+    def inline as map of string to string init embeddedImages($deck, $pre.root);
+    testing.assertTrue(strings.startsWith(
+        $inline["_generated/fake/d.svg"],
+        "data:image/svg+xml;base64,"));
+    discard($pre.root);
+    testing.assertFalse(fs.exists($pre.root));
+    discard("");
+    testing.assertEqual(len(embeddedImages($deck, "")), 0);
+}
+
+func testAFailingPluginStopsTheBuildAndSaysWhy() {
+    def dir as string init fs.realpath(fs.makeTempDir());
+    defer fs.removeAll($dir);
+    fs.writeString(
+        path.join($dir, "fail.j"),
+        strings.join(['use io;', 'io.eprintf("nope\n");', 'exit 1;'], "\n") + "\n");
+    fs.writeString(
+        path.join($dir, "cantrip.toml"),
+        "[preprocessor.broken]\n" + 'command = "jennifer"' + "\n" +
+            'args = ["run", ' + json.encode(path.join($dir, "fail.j")) + ']' + "\n");
+    def target as string init writeDeck($dir, sample(), "talk.md");
+    def message as string init "";
+    try {
+        dispatch("html", [$target], parsed(["html", $target]));
+    } catch (e) {
+        testing.assertEqual($e.kind, "plugin");
+        $message = $e.message;
+    }
+    testing.assertContains($message, "preprocessor broken: exited 1: nope");
+    testing.assertFalse(fs.exists(path.join($dir, "talk.html")));
+    testing.assertEqual(run(["cantrip", "html", $target]), FAILED);
+}
+
+func testAMissingPluginIsNamedBothWays() {
+    def dir as string init fs.realpath(fs.makeTempDir());
+    defer fs.removeAll($dir);
+    fs.writeString(path.join($dir, "cantrip.toml"), "[preprocessor.zzznothere]\n");
+    def target as string init writeDeck($dir, sample(), "talk.md");
+    def resolved as list of plugin.Resolved init plan($dir);
+    testing.assertEqual($resolved[0].origin, plugin.NOWHERE);
+    testing.assertEqual(listPlugins($dir), OK);
+    def message as string init "";
+    try {
+        dispatch("info", [$target], parsed(["info", $target]));
+    } catch (e) {
+        $message = $e.message;
+    }
+    testing.assertContains($message, "nothing named cantrip-zzznothere was found");
+}
+
+func testAProgramInTheDeckIsFoundByPath() {
+    def dir as string init fs.realpath(fs.makeTempDir());
+    defer fs.removeAll($dir);
+    fs.mkdirAll(path.join($dir, "tools"));
+    fs.writeString(path.join($dir, "tools/draw"), "#!/bin/sh\n");
+    def spec as plugin.Plugin init plugin.Plugin{
+        name: "draw",
+        command: "./tools/draw",
+        args: [],
+        settings: '{}'
+    };
+    def r as plugin.Resolved init resolve($spec, $dir);
+    testing.assertEqual($r.origin, plugin.IN_DECK);
+    testing.assertEqual($r.path, path.join($dir, "tools/draw"));
+    testing.assertTrue(onPath("sh") != "");
+    testing.assertEqual(onPath("zzz-no-such-program"), "");
+}
+
+func testGeneratedIsReservedInTheDeck() {
+    def dir as string init fs.realpath(fs.makeTempDir());
+    defer fs.removeAll($dir);
+    def target as string init pluginDeck($dir);
+    fs.mkdirAll(path.join($dir, "_generated"));
+    def message as string init "";
+    try {
+        preprocess(readSources([$target]), $dir, $dir, false);
+    } catch (e) {
+        $message = $e.message;
+    }
+    testing.assertContains($message, "is reserved");
+}
+
+func testWithoutAConfigNothingRuns() {
+    def dir as string init fs.realpath(fs.makeTempDir());
+    defer fs.removeAll($dir);
+    def target as string init writeDeck($dir, sample(), "talk.md");
+    testing.assertEqual(len(pluginsFor($dir)), 0);
+    def pre as Preprocessed init preprocess(readSources([$target]), $dir, $dir, false);
+    testing.assertEqual($pre.root, "");
+    testing.assertEqual($pre.sources[0].src, "talk.md");
+    def w as Written init writeHandoutWith(
+        deckFrom($pre.sources),
+        parsed(["handout", $target]),
+        path.join($dir, "h.pdf"),
+        $dir,
+        "");
+    testing.assertTrue($w.bytes > 0);
+}
+
+func testTheRequestDescribesTheDeck() {
+    def dir as string init fs.realpath(fs.makeTempDir());
+    defer fs.removeAll($dir);
+    def target as string init pluginDeck($dir);
+    def book as plugin.Book init bookOf(readSources([$target]), $dir, $dir);
+    testing.assertEqual($book.title, "Plugged");
+    testing.assertEqual($book.authors, ["Ada"]);
+    testing.assertEqual($book.language, "en");
+    testing.assertEqual($book.src, $dir);
+    testing.assertEqual(relativeTo("decks/a/talk.md", "decks/a"), "talk.md");
+    testing.assertEqual(relativeTo("decks/a/sub/b.md", "decks/a"), "sub/b.md");
+    testing.assertEqual(relativeTo("other/c.md", "decks/a"), "other/c.md");
+    testing.assertEqual(relativeTo("talk.md", ""), "talk.md");
+}
+
+func testTheWritersTakeARoot() {
+    def dir as string init fs.realpath(fs.makeTempDir());
+    defer fs.removeAll($dir);
+    def target as string init writeDeck($dir, sample(), "deck.md");
+    def deck as slides.Deck init readDeck([$target]);
+    def page as Written init writeHtmlWith(
+        $deck,
+        parsed(["html", $target]),
+        path.join($dir, "a.html"),
+        "");
+    testing.assertTrue($page.bytes > 0);
+    def printed as Written init writePdfWith(
+        $deck,
+        parsed(["pdf", $target]),
+        path.join($dir, "a.pdf"),
+        $dir,
+        "");
+    testing.assertEqual($printed.pages, 2);
+}
+
+func testNotesBesideTheHandoutSlides() {
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def target as string init writeDeck($tmp, sample(), "deck.md");
+    testing.assertEqual(slideNotes(readDeck([$target])), ["say this", ""]);
+    def out as string init path.join($tmp, "beside.pdf");
+    testing.assertEqual(
+        dispatch("handout", [$target], parsed(["handout", $target, "--notes-beside", "-o", $out])),
+        OK);
+    testing.assertTrue(fs.isFile($out));
+    def r as args.Result init parsed(["handout", "a.md", "--notes-beside"]);
+    testing.assertTrue(args.asBool($r, "notes-beside"));
 }

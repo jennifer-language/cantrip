@@ -14,6 +14,7 @@
  */
 
 use strings;
+use maps;
 use lists;
 use convert;
 use regex;
@@ -24,6 +25,7 @@ import "doctree.j" as doctree;
 import "./slides.j" as slides;
 import "./theme.j" as theme;
 import "./highlight.j" as highlight;
+import "./mathml.j" as mathml;
 
 /** The generator name written into the document's meta tags. */
 export def const GENERATOR as string init "cantrip";
@@ -47,6 +49,10 @@ export def const DEFAULT_TRANSITION as string init "fade";
  * @field startNotes {string} notes panel at start, "open" or "closed"; "" for the deck's own
  * @field startSlide {string} the slide to open on, 1-based; "" for the deck's own
  * @field startOverview {string} overview at start, "open" or "closed"; "" for the deck's own
+ * @field embedded {map of string to string} pictures to carry inside the page:
+ *     a slide's image target, as the Markdown writes it, to the `data:` URL
+ *     that replaces it. The caller fills it with the files plugins generated,
+ *     so the slideshow stays one file.
  */
 export def struct Options {
     theme as string,
@@ -60,7 +66,8 @@ export def struct Options {
     transition as string,
     startNotes as string,
     startSlide as string,
-    startOverview as string
+    startOverview as string,
+    embedded as map of string to string
 };
 
 /**
@@ -94,7 +101,8 @@ export func defaults() {
         transition: "",
         startNotes: "",
         startSlide: "",
-        startOverview: ""
+        startOverview: "",
+        embedded: {}
     };
 }
 
@@ -307,17 +315,70 @@ export func pickHighlight(deck as slides.Deck, opts as Options) {
 
 /**
  * Render one slide's Markdown body to HTML.
+ *
+ * A MathML element (see `mathml.j`) is lifted out before the tree is rendered
+ * and put back afterwards, so it reaches the page as markup whatever
+ * `rawHtml` says, while any other HTML keeps the treatment `rawHtml` gives it.
+ * A picture named in `embedded` is carried inside the page.
  * @param slide {slides.Slide} the slide to render
- * @param opts {Options} the caller's options, for `rawHtml` and `highlight`
+ * @param opts {Options} the caller's options, for `rawHtml`, `highlight` and
+ *     `embedded`
  * @return {string} the slide's inner HTML
  */
 export func body(slide as slides.Slide, opts as Options) {
-    if (not $opts.highlight) {
-        return keyCaps(markdown.toHtmlWith(
-            $slide.body,
-            markdown.HtmlOptions{allowRawHtml: $opts.rawHtml}));
+    def tree as doctree.Node init markdown.parse($slide.body);
+    def maths as list of string init [];
+    if (mathml.holds($tree)) {
+        def taken as mathml.Rewritten init mathml.rewrite($tree, "mark", 0);
+        $tree = $taken.node;
+        $maths = $taken.taken;
     }
-    return keyCaps(highlighted($slide.body, $opts.rawHtml));
+    def out as string init "";
+    if ($opts.highlight) {
+        $out = highlightedTree($tree, $slide.body, $opts.rawHtml);
+    } else {
+        def options as doctree.HtmlOptions;
+        $options.allowRawHtml = $opts.rawHtml;
+        $out = doctree.renderHtml($tree, $options);
+    }
+    return embed(withMaths(keyCaps($out), $maths), $opts.embedded);
+}
+
+/**
+ * Put the MathML elements `mathml.rewrite` took out back in place of their
+ * placeholders. A display element's placeholder may come back wrapped in a
+ * paragraph, which a block of maths does not belong in, so that is undone
+ * first.
+ * @param html {string} the rendered slide
+ * @param maths {list of string} the elements, in placeholder order
+ * @return {string} the slide with its maths
+ */
+export func withMaths(html as string, maths as list of string) {
+    def out as string init $html;
+    for (def k in 0..len($maths)) {
+        def mark as string init mathml.placeholder($k);
+        $out = strings.replace($out, "<p>" + $mark + "</p>", $maths[$k]);
+        $out = strings.replace($out, $mark, $maths[$k]);
+    }
+    return $out;
+}
+
+/**
+ * Carry pictures inside the page: each `src` attribute that names a key of
+ * `embedded` exactly is pointed at its `data:` URL instead.
+ * @param html {string} the rendered slide
+ * @param embedded {map of string to string} image target to `data:` URL
+ * @return {string} the slide with those pictures inline
+ */
+export func embed(html as string, embedded as map of string to string) {
+    def out as string init $html;
+    for (def url in maps.keys($embedded)) {
+        $out = strings.replace(
+            $out,
+            'src="' + attrValue($url) + '"',
+            'src="' + attrValue($embedded[$url]) + '"');
+    }
+    return $out;
 }
 
 /**
@@ -354,8 +415,19 @@ export def struct Marked {
  * @return {string} the rendered HTML
  */
 export func highlighted(md as string, rawHtml as bool) {
+    return highlightedTree(markdown.parse($md), $md, $rawHtml);
+}
+
+/**
+ * `highlighted` over a tree that is already parsed.
+ * @param tree {doctree.Node} the parsed Markdown
+ * @param md {string} its source, which the placeholders must not occur in
+ * @param rawHtml {bool} pass raw HTML in the Markdown through unescaped
+ * @return {string} the rendered HTML
+ */
+export func highlightedTree(tree as doctree.Node, md as string, rawHtml as bool) {
     def prefix as string init placeholderPrefix($md);
-    def marked as Marked init markCode(markdown.parse($md), $prefix, 0);
+    def marked as Marked init markCode($tree, $prefix, 0);
     # A zero value, as `markdown.toHtmlWith` builds it: a literal of another
     # module's struct must name every field unless that module is installed.
     def options as doctree.HtmlOptions;

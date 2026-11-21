@@ -20,6 +20,9 @@ use strings;
 use lists;
 use convert;
 use regex;
+use os;
+use meta;
+use encoding;
 
 import "args.j" as args;
 import "pdf.j" as pdf;
@@ -28,6 +31,7 @@ import "./theme.j" as theme;
 import "./htmlout.j" as htmlout;
 import "./pdfout.j" as pdfout;
 import "./highlight.j" as highlight;
+import "./plugin.j" as plugin;
 
 /** The application version, and the version `--version` reports. */
 export def const VERSION as string init "0.5.3";
@@ -73,7 +77,7 @@ export def const MAX_SLIDES as int init 2000;
  * @return {list of string} the subcommand names
  */
 export func commands() {
-    return ["build", "html", "pdf", "handout", "highlight", "info", "themes"];
+    return ["build", "html", "pdf", "handout", "highlight", "info", "plugins", "themes"];
 }
 
 /**
@@ -113,6 +117,11 @@ export func parser() {
     $p = args.flag($p, "footer", "f", "", "text shown at the foot of every slide");
     $p = args.flag($p, "bookmarks", "", "2", "PDF outline depth, 0 for none");
     $p = args.boolFlag($p, "notes", "n", "include speaker notes in the PDF");
+    $p = args.boolFlag(
+        $p,
+        "notes-beside",
+        "",
+        "handout: print each slide's speaker notes in the column beside it");
     $p = args.boolFlag($p, "no-notes", "", "leave speaker notes out of the HTML");
     $p = args.flag($p, "notes-panel", "", "", "HTML: speaker notes open or closed at start");
     $p = args.flag($p, "start-slide", "", "", "HTML: the slide to open on, from 1");
@@ -213,16 +222,77 @@ export func stem(p as string) {
 }
 
 /**
- * Read every input file and parse them into one deck.
+ * Read the input files, each with its path relative to the deck's directory.
  *
- * The first file's front matter describes the deck; later files contribute
- * only slides, which is what lets a long talk live in one file per section.
+ * Every file is checked before anything is parsed: it must exist, be a regular
+ * file, and be no larger than `MAX_DECK_BYTES`.
  * @param paths {list of string} the input files, in order
- * @return {slides.Deck} the combined deck
- * @throws {Error} kind "cli" when a path is missing or is not a file, kind
- *   "limit" when a file is over `MAX_DECK_BYTES` or the deck over `MAX_SLIDES`
+ * @return {list of plugin.Chapter} each file's relative path and text
+ * @throws {Error} kind "cli" for a missing file or a directory, kind "limit"
+ *     for a file over `MAX_DECK_BYTES`
  */
-export func readDeck(paths as list of string) {
+export func readSources(paths as list of string) {
+    def out as list of plugin.Chapter;
+    if (len($paths) == 0) {
+        return $out;
+    }
+    def base as string init path.dir($paths[0]);
+    for (def p in $paths) {
+        if (not fs.exists($p)) {
+            throw Error{kind: "cli", message: "no such file: " + $p, file: $p, line: 0, col: 0};
+        }
+        if (not fs.isFile($p)) {
+            throw Error{kind: "cli", message: "not a file: " + $p, file: $p, line: 0, col: 0};
+        }
+        def size as int init fs.stat($p).size;
+        if ($size > MAX_DECK_BYTES) {
+            throw tooLarge($p, $size);
+        }
+        $out[] = plugin.Chapter{src: relativeTo($p, $base), content: fs.readString($p)};
+    }
+    return $out;
+}
+
+# tooLarge is the error for a deck file, or a preprocessor's rewrite of one,
+# over `MAX_DECK_BYTES`.
+func tooLarge(p as string, size as int) {
+    return Error{
+        kind: "limit",
+        message: $p + " is " + convert.toString($size) + " bytes; a deck may be at most " +
+            convert.toString(MAX_DECK_BYTES) + " (2 MiB)",
+        file: $p,
+        line: 0,
+        col: 0
+    };
+}
+
+/**
+ * A path as the request names it: relative to the deck's directory when it
+ * lies below it, else as given.
+ * @param p {string} an input file
+ * @param base {string} the deck's directory, the first file's
+ * @return {string} the relative path
+ */
+export func relativeTo(p as string, base as string) {
+    def dir as string init $base;
+    if ($dir == "" or $dir == ".") {
+        return path.clean($p);
+    }
+    def clean as string init path.clean($p);
+    def prefix as string init path.clean($dir) + "/";
+    if (strings.startsWith($clean, $prefix)) {
+        return $clean[len($prefix)..];
+    }
+    return $clean;
+}
+
+/**
+ * Parse the deck's files, in order, into one deck.
+ * @param sources {list of plugin.Chapter} the files' texts
+ * @return {slides.Deck} the deck; the first file's front matter wins
+ * @throws {Error} kind "limit" when the deck holds more than `MAX_SLIDES`
+ */
+export func deckFrom(sources as list of plugin.Chapter) {
     def out as slides.Deck init slides.Deck{
         title: "",
         author: "",
@@ -234,44 +304,338 @@ export func readDeck(paths as list of string) {
     };
     def first as bool init true;
     def total as int init 0;
-    for (def p in $paths) {
-        if (not fs.exists($p)) {
-            throw Error{kind: "cli", message: "no such file: " + $p, file: $p, line: 0, col: 0};
-        }
-        if (not fs.isFile($p)) {
-            throw Error{kind: "cli", message: "not a file: " + $p, file: $p, line: 0, col: 0};
-        }
-        def size as int init fs.stat($p).size;
-        if ($size > MAX_DECK_BYTES) {
-            throw Error{
-                kind: "limit",
-                message: $p + " is " + convert.toString($size) + " bytes; a deck may be at most " +
-                    convert.toString(MAX_DECK_BYTES) + " (2 MiB)",
-                file: $p,
-                line: 0,
-                col: 0
-            };
-        }
-        def text as string init fs.readString($p);
+    for (def c in $sources) {
         # Counted before the parse, which costs a Markdown parse per slide: a
         # file of a million one-line slides would otherwise take hours to refuse.
-        $total = $total + slides.slideCount($text);
+        $total = $total + slides.slideCount($c.content);
         if ($total > MAX_SLIDES) {
             throw Error{
                 kind: "limit",
                 message: "the deck has more than " + convert.toString(MAX_SLIDES) +
                     " slides, the most it may have",
-                file: $p,
+                file: $c.src,
                 line: 0,
                 col: 0
             };
         }
-        def one as slides.Deck init slides.parse($text);
+        def one as slides.Deck init slides.parse($c.content);
         if ($first) {
             $out = $one;
             $first = false;
         } else {
             $out = slides.concat($out, $one);
+        }
+    }
+    return $out;
+}
+
+/**
+ * Read and parse the input files into one deck, with no plugins run.
+ * @param paths {list of string} the input files, in order
+ * @return {slides.Deck} the deck; the first file's front matter wins
+ * @throws {Error} kind "cli" for a missing file or a directory, kind "limit"
+ *     for a file over `MAX_DECK_BYTES` or a deck over `MAX_SLIDES` slides
+ */
+export func readDeck(paths as list of string) {
+    return deckFrom(readSources($paths));
+}
+
+/**
+ * The deck's files after its preprocessors ran, and where their files are.
+ * @field sources {list of plugin.Chapter} each file's text, rewritten
+ * @field root {string} the scratch directory holding `_generated`, "" when no
+ *     preprocessor ran; the caller removes it
+ */
+export def struct Preprocessed {
+    sources as list of plugin.Chapter,
+    root as string
+};
+
+/**
+ * The preprocessors a deck names in `cantrip.toml` beside its first file.
+ * @param baseDir {string} the directory the first input file came from
+ * @return {list of plugin.Plugin} the configured plugins, none without a file
+ * @throws {Error} kind "plugin" for a malformed file
+ */
+export func pluginsFor(baseDir as string) {
+    def file as string init path.join(dirOf($baseDir), plugin.CONFIG_FILE);
+    if (not fs.isFile($file)) {
+        def none as list of plugin.Plugin;
+        return $none;
+    }
+    return plugin.parseConfig(fs.readString($file), $file);
+}
+
+# dirOf is a directory as a path can be joined to: "." for the empty string.
+func dirOf(dir as string) {
+    if ($dir == "") {
+        return ".";
+    }
+    return $dir;
+}
+
+/**
+ * Find a program on `PATH`: a regular file with an execute bit.
+ * @param command {string} a bare program name
+ * @return {string} its path, or "" when there is none
+ */
+export func onPath(command as string) {
+    def raw as string init os.getEnv("PATH");
+    for (def dir in strings.split($raw, ":")) {
+        if ($dir == "") {
+            continue;
+        }
+        def candidate as string init path.join($dir, $command);
+        if (fs.isFile($candidate) and fs.stat($candidate).mode & 0o111 != 0) {
+            return $candidate;
+        }
+    }
+    return "";
+}
+
+/**
+ * Work out the program one configured plugin would run.
+ *
+ * A command with a `/` in it is a path, relative to the deck's directory, and
+ * is used as written; a bare name is looked for on `PATH`. A table that sets
+ * no `command` tries `cantrip-NAME`, then `grimoire-NAME` (`plugin.candidates`).
+ * @param spec {plugin.Plugin} the configured plugin
+ * @param baseDir {string} the deck's directory
+ * @return {plugin.Resolved} the program, and where it came from
+ */
+export func resolve(spec as plugin.Plugin, baseDir as string) {
+    def out as plugin.Resolved init plugin.Resolved{
+        name: $spec.name,
+        command: $spec.command,
+        args: $spec.args,
+        path: "",
+        origin: plugin.NOWHERE
+    };
+    for (def command in plugin.candidates($spec)) {
+        if (strings.contains($command, "/")) {
+            def full as string init $command;
+            if (not path.isAbs($full)) {
+                $full = path.join(dirOf($baseDir), $full);
+            }
+            if (not fs.isFile($full)) {
+                continue;
+            }
+            $out.path = fs.realpath($full);
+            $out.origin = plugin.OUTSIDE;
+            if (within($out.path, fs.realpath(dirOf($baseDir)))) {
+                $out.origin = plugin.IN_DECK;
+            }
+            return $out;
+        }
+        def found as string init onPath($command);
+        if ($found != "") {
+            $out.path = $found;
+            $out.origin = plugin.ON_PATH;
+            return $out;
+        }
+    }
+    return $out;
+}
+
+/**
+ * Every plugin a deck would run, in order.
+ * @param baseDir {string} the deck's directory
+ * @return {list of plugin.Resolved} one entry per configured plugin
+ * @throws {Error} kind "plugin" for a malformed `cantrip.toml`
+ */
+export func plan(baseDir as string) {
+    def out as list of plugin.Resolved;
+    for (def spec in pluginsFor($baseDir)) {
+        $out[] = resolve($spec, $baseDir);
+    }
+    return $out;
+}
+
+/**
+ * The `plugins` verb: what the deck would run, and where each program came
+ * from, without running anything.
+ * @param baseDir {string} the deck's directory
+ * @return {int} always `OK`
+ * @throws {Error} kind "plugin" for a malformed `cantrip.toml`
+ */
+export func listPlugins(baseDir as string) {
+    def resolved as list of plugin.Resolved init plan($baseDir);
+    if (len($resolved) == 0) {
+        io.printf(
+            "no plugins: there is no %s beside the deck, or it names none\n",
+            plugin.CONFIG_FILE);
+        return OK;
+    }
+    for (def line in plugin.listing($resolved)) {
+        io.printf("%s\n", printable($line));
+    }
+    return OK;
+}
+
+# pluginError is a plugin failure, named for the plugin.
+func pluginError(name as string, message as string) {
+    return Error{
+        kind: "plugin",
+        message: "preprocessor " + $name + ": " + $message,
+        file: "",
+        line: 0,
+        col: 0
+    };
+}
+
+# absolute is a directory as an absolute, symlink-free path.
+func absolute(dir as string) {
+    return fs.realpath(dirOf($dir));
+}
+
+/**
+ * What the request says about the deck: its title, author and language from
+ * the front matter, its directory, and where the outputs go.
+ * @param sources {list of plugin.Chapter} the files as read
+ * @param baseDir {string} the deck's directory
+ * @param outDir {string} the directory the outputs are written to
+ * @return {plugin.Book} the deck as a book
+ */
+export func bookOf(sources as list of plugin.Chapter, baseDir as string, outDir as string) {
+    def deck as slides.Deck init deckFrom($sources);
+    def authors as list of string;
+    if ($deck.author != "") {
+        $authors[] = $deck.author;
+    }
+    return plugin.Book{
+        title: $deck.title,
+        authors: $authors,
+        language: slides.metaOr($deck.meta, "lang", ""),
+        src: absolute($baseDir),
+        out: absolute($outDir)
+    };
+}
+
+# runOne feeds one request to one plugin and returns its reply.
+func runOne(found as plugin.Resolved, body as string, verbose as bool) {
+    if ($found.path == "") {
+        throw pluginError(
+            $found.name,
+            "nothing named " + $found.command + " was found (see `cantrip plugins`)");
+    }
+    if ($verbose) {
+        io.printf("  plugin  preprocessor %s  ->  %s\n", $found.name, printable($found.path));
+    }
+    def argv as list of string init [$found.path];
+    for (def arg in $found.args) {
+        $argv[] = $arg;
+    }
+    def result as os.Result;
+    try {
+        $result = os.run($argv, $body);
+    } catch (e) {
+        throw pluginError($found.name, "could not run " + $found.path + " (" + $e.message + ")");
+    }
+    if ($result.exitCode != 0) {
+        throw pluginError(
+            $found.name,
+            "exited " + convert.toString($result.exitCode) + ": " + strings.trim($result.stderr));
+    }
+    return $result.stdout;
+}
+
+/**
+ * Run the deck's preprocessors over its files, in the order `cantrip.toml`
+ * lists them, each over what the last produced.
+ *
+ * Each is handed an empty directory of its own, `_generated/NAME/` in a scratch
+ * directory, and what it writes there is what a slide links as
+ * `_generated/NAME/...`. The caller removes `root` when the build is done; a
+ * failed run removes it here.
+ * @param sources {list of plugin.Chapter} the files as read
+ * @param baseDir {string} the deck's directory
+ * @param outDir {string} the directory the outputs are written to
+ * @param verbose {bool} say what runs, by its path
+ * @return {Preprocessed} the rewritten files and the scratch directory
+ * @throws {Error} kind "plugin" when a plugin is missing, fails, or replies
+ *     with something api 1 does not allow, when this interpreter cannot run
+ *     programs, or when the deck's directory has a `_generated` of its own;
+ *     kind "limit" when a rewritten file is over `MAX_DECK_BYTES`
+ */
+export func preprocess(
+    sources as list of plugin.Chapter,
+    baseDir as string,
+    outDir as string,
+    verbose as bool) {
+    def specs as list of plugin.Plugin init pluginsFor($baseDir);
+    if (len($specs) == 0) {
+        return Preprocessed{sources: $sources, root: ""};
+    }
+    if (not meta.hasCapability("exec")) {
+        throw pluginError(
+            $specs[0].name,
+            "this interpreter cannot run programs; preprocessors need the default `jennifer`");
+    }
+    def taken as string init path.join(dirOf($baseDir), plugin.GENERATED);
+    if (fs.exists($taken)) {
+        throw pluginError(
+            $specs[0].name,
+            $taken + " exists, but `" + plugin.GENERATED +
+                "` is reserved for the files preprocessors generate; rename it");
+    }
+    for (def warning in plugin.concerns(plan($baseDir))) {
+        io.eprintf("%s: warning: %s\n", PROGRAM, printable($warning));
+    }
+    def book as plugin.Book init bookOf($sources, $baseDir, $outDir);
+    def root as string init fs.realpath(fs.makeTempDir(os.tempDir(), "cantrip-plugins-"));
+    errdefer fs.removeAll($root);
+    def generated as string init path.join($root, plugin.GENERATED);
+    def out as list of plugin.Chapter init $sources;
+    for (def spec in $specs) {
+        def files as string init path.join($generated, $spec.name);
+        fs.mkdirAll($files);
+        def reply as string init runOne(
+            resolve($spec, $baseDir),
+            plugin.request($book, $spec, $out, $files, $generated),
+            $verbose);
+        $out = plugin.merge($spec, $out, $reply);
+    }
+    for (def c in $out) {
+        def size as int init len(convert.bytesFromString("utf-8", $c.content));
+        if ($size > MAX_DECK_BYTES) {
+            throw tooLarge($c.src, $size);
+        }
+    }
+    return Preprocessed{sources: $out, root: $root};
+}
+
+/**
+ * Remove the scratch directory a build's preprocessors wrote into.
+ * @param root {string} the directory, or "" when no preprocessor ran
+ */
+export func discard(root as string) {
+    if ($root != "") {
+        fs.removeAll($root);
+    }
+}
+
+/**
+ * The pictures the preprocessors generated that the slides link, as `data:`
+ * URLs keyed by the target the Markdown writes, for the slideshow to carry.
+ * @param deck {slides.Deck} the deck
+ * @param root {string} the scratch directory, "" when no preprocessor ran
+ * @return {map of string to string} image target to `data:` URL
+ */
+export func embeddedImages(deck as slides.Deck, root as string) {
+    def out as map of string to string init {};
+    if ($root == "") {
+        return $out;
+    }
+    for (def url in pdfout.imageUrls($deck)) {
+        def rel as string init plugin.generatedPath($url);
+        def kind as string init plugin.mediaType($rel);
+        if ($rel == "" or $kind == "") {
+            continue;
+        }
+        def file as string init path.join($root, path.join(plugin.GENERATED, $rel));
+        if (fs.isFile($file)) {
+            $out[$url] = "data:" + $kind + ";base64," +
+                encoding.toText("base64", fs.readBytes($file));
         }
     }
     return $out;
@@ -302,9 +666,48 @@ export def struct Located {
  * @return {map of string to pdf.Image} pictures keyed by their source URL
  */
 export func loadImages(deck as slides.Deck, baseDir as string, verbose as bool) {
+    return loadImagesWith($deck, $baseDir, $verbose, "");
+}
+
+/**
+ * `loadImages`, also drawing the pictures preprocessors generated.
+ *
+ * A target under `_generated/` is read from the scratch directory rather than
+ * beside the deck, and an SVG is drawn from the PNG beside it, because the PDF
+ * draws no SVG (`plugin.printable`).
+ * @param deck {slides.Deck} the deck to scan
+ * @param baseDir {string} the directory the first input file came from
+ * @param verbose {bool} report each picture that was skipped, and why
+ * @param root {string} the scratch directory, "" when no preprocessor ran
+ * @return {map of string to pdf.Image} pictures keyed by their source URL
+ */
+export func loadImagesWith(
+    deck as slides.Deck,
+    baseDir as string,
+    verbose as bool,
+    root as string) {
     def out as map of string to pdf.Image init {};
     def n as int init 0;
     for (def url in pdfout.imageUrls($deck)) {
+        def rel as string init plugin.generatedPath($url);
+        if ($root != "" and $rel != "") {
+            def file as string init path.join(
+                $root,
+                path.join(plugin.GENERATED, plugin.printable($rel)));
+            if (not fs.isFile($file)) {
+                note($verbose, "  generated image missing, using alt text: " + printable($url));
+                continue;
+            }
+            $n = $n + 1;
+            try {
+                $out[$url] = pdf.loadImage("img" + convert.toString($n), fs.readBytes($file));
+            } catch (e) {
+                note(
+                    $verbose,
+                    "  could not load " + printable($url) + ": " + printable($e.message));
+            }
+            continue;
+        }
         if (isRemote($url)) {
             if ($verbose) {
                 io.eprintf("  skipped remote image %s\n", printable($url));
@@ -328,6 +731,13 @@ export func loadImages(deck as slides.Deck, baseDir as string, verbose as bool) 
         }
     }
     return $out;
+}
+
+# note prints a line on stderr under --verbose.
+func note(verbose as bool, line as string) {
+    if ($verbose) {
+        io.eprintf("%s\n", $line);
+    }
 }
 
 /**
@@ -520,7 +930,22 @@ export func requireSlides(deck as slides.Deck) {
  * @throws {Error} kind "theme" when a name is unknown
  */
 export func writeHtml(deck as slides.Deck, r as args.Result, target as string) {
-    def out as string init htmlout.render($deck, htmlOptions($r));
+    return writeHtmlWith($deck, $r, $target, "");
+}
+
+/**
+ * `writeHtml`, carrying the pictures preprocessors generated inside the page.
+ * @param deck {slides.Deck} the deck to render
+ * @param r {args.Result} the parsed command line
+ * @param target {string} where to write
+ * @param root {string} the scratch directory, "" when no preprocessor ran
+ * @return {Written} the byte count; an HTML file has no pages
+ * @throws {Error} kind "theme" when a name is unknown
+ */
+export func writeHtmlWith(deck as slides.Deck, r as args.Result, target as string, root as string) {
+    def opts as htmlout.Options init htmlOptions($r);
+    $opts.embedded = embeddedImages($deck, $root);
+    def out as string init htmlout.render($deck, $opts);
     fs.writeString($target, $out);
     return Written{bytes: len(convert.bytesFromString("utf-8", $out)), pages: 0};
 }
@@ -538,8 +963,27 @@ export func writeHtml(deck as slides.Deck, r as args.Result, target as string) {
  * @throws {Error} kind "theme" when a name is unknown
  */
 export func writePdf(deck as slides.Deck, r as args.Result, target as string, baseDir as string) {
+    return writePdfWith($deck, $r, $target, $baseDir, "");
+}
+
+/**
+ * `writePdf`, also drawing the pictures preprocessors generated.
+ * @param deck {slides.Deck} the deck to render
+ * @param r {args.Result} the parsed command line
+ * @param target {string} where to write
+ * @param baseDir {string} the directory the first input file came from
+ * @param root {string} the scratch directory, "" when no preprocessor ran
+ * @return {Written} the byte count and the page count
+ * @throws {Error} kind "theme" when a name is unknown
+ */
+export func writePdfWith(
+    deck as slides.Deck,
+    r as args.Result,
+    target as string,
+    baseDir as string,
+    root as string) {
     def opts as pdfout.Options init pdfOptions($r);
-    $opts.images = loadImages($deck, $baseDir, args.asBool($r, "verbose"));
+    $opts.images = loadImagesWith($deck, $baseDir, args.asBool($r, "verbose"), $root);
     def doc as pdf.Document init pdfout.document($deck, $opts);
     def out as bytes init pdf.render($doc);
     fs.writeBytes($target, $out);
@@ -560,17 +1004,56 @@ export func writeHandout(
     r as args.Result,
     target as string,
     baseDir as string) {
+    return writeHandoutWith($deck, $r, $target, $baseDir, "");
+}
+
+/**
+ * `writeHandout`, also drawing the pictures preprocessors generated.
+ * @param deck {slides.Deck} the deck to render
+ * @param r {args.Result} the parsed command line
+ * @param target {string} where to write
+ * @param baseDir {string} the directory the first input file came from
+ * @param root {string} the scratch directory, "" when no preprocessor ran
+ * @return {Written} the byte count and the slide page count
+ * @throws {Error} kind "theme" when a name is unknown
+ */
+export func writeHandoutWith(
+    deck as slides.Deck,
+    r as args.Result,
+    target as string,
+    baseDir as string,
+    root as string) {
     def opts as pdfout.Options init pdfOptions($r);
-    $opts.images = loadImages($deck, $baseDir, args.asBool($r, "verbose"));
+    $opts.images = loadImagesWith($deck, $baseDir, args.asBool($r, "verbose"), $root);
+    # Notes printed beside the slides are not printed under them as well.
+    def beside as list of string init [];
+    if (args.asBool($r, "notes-beside")) {
+        $opts.notes = false;
+        $beside = slideNotes($deck);
+    }
     def slidesDoc as pdf.Document init pdfout.document($deck, $opts);
-    def doc as pdf.Document init pdfout.handout(
+    def doc as pdf.Document init pdfout.handoutWith(
         $slidesDoc,
         pdfout.pickStage($deck, $opts),
         pdfout.handoutTitle($deck),
-        pdfout.handoutFooter($deck, $opts));
+        pdfout.handoutFooter($deck, $opts),
+        $beside);
     def out as bytes init pdf.render($doc);
     fs.writeBytes($target, $out);
     return Written{bytes: len($out), pages: pdf.getTotalPages($slidesDoc)};
+}
+
+/**
+ * Each slide's speaker notes, by slide, for the handout's notes column.
+ * @param deck {slides.Deck} the deck
+ * @return {list of string} one entry per slide, "" for a slide without notes
+ */
+export func slideNotes(deck as slides.Deck) {
+    def out as list of string init [];
+    for (def slide in $deck.slides) {
+        $out[] = $slide.notes;
+    }
+    return $out;
 }
 
 /**
@@ -862,18 +1345,29 @@ func highlightOne(p as string) {
  * @throws {Error} kind "cli" or "theme" on bad input or an unknown name
  */
 export func dispatch(verb as string, files as list of string, r as args.Result) {
-    def deck as slides.Deck init readDeck($files);
+    def baseDir as string init path.dir($files[0]);
+    if ($verb == "plugins") {
+        return listPlugins($baseDir);
+    }
+    def given as string init args.asString($r, "out");
     def verbose as bool init args.asBool($r, "verbose");
+    def outDir as string init $baseDir;
+    if (strings.trim($given) != "") {
+        $outDir = path.dir(strings.trim($given));
+    }
+    def pre as Preprocessed init preprocess(readSources($files), $baseDir, $outDir, $verbose);
+    # At function level: a `defer` runs when its own block exits, so one
+    # inside an `if` would remove the directory before anything read it.
+    defer discard($pre.root);
+    def deck as slides.Deck init deckFrom($pre.sources);
     if ($verb == "info") {
         return report($deck);
     }
     requireSlides($deck);
-    def baseDir as string init path.dir($files[0]);
-    def given as string init args.asString($r, "out");
     if ($verb == "html") {
         def target as string init outputPath($files[0], "html", $given);
         guardInputs($target, $files);
-        def w as Written init writeHtml($deck, $r, $target);
+        def w as Written init writeHtmlWith($deck, $r, $target, $pre.root);
         announce($target, $w.bytes, len($deck.slides), $verbose);
         return OK;
     }
@@ -883,7 +1377,7 @@ export func dispatch(verb as string, files as list of string, r as args.Result) 
             $target = strings.trim($given);
         }
         guardInputs($target, $files);
-        def w as Written init writeHandout($deck, $r, $target, $baseDir);
+        def w as Written init writeHandoutWith($deck, $r, $target, $baseDir, $pre.root);
         announce($target, $w.bytes, len($deck.slides), $verbose);
         warnOverflow($deck, $w.pages);
         return OK;
@@ -891,7 +1385,7 @@ export func dispatch(verb as string, files as list of string, r as args.Result) 
     if ($verb == "pdf") {
         def target as string init outputPath($files[0], "pdf", $given);
         guardInputs($target, $files);
-        def w as Written init writePdf($deck, $r, $target, $baseDir);
+        def w as Written init writePdfWith($deck, $r, $target, $baseDir, $pre.root);
         announce($target, $w.bytes, len($deck.slides), $verbose);
         warnOverflow($deck, $w.pages);
         return OK;
@@ -907,9 +1401,9 @@ export func dispatch(verb as string, files as list of string, r as args.Result) 
     def pdfTarget as string init $base + ".pdf";
     guardInputs($htmlTarget, $files);
     guardInputs($pdfTarget, $files);
-    def page as Written init writeHtml($deck, $r, $htmlTarget);
+    def page as Written init writeHtmlWith($deck, $r, $htmlTarget, $pre.root);
     announce($htmlTarget, $page.bytes, len($deck.slides), $verbose);
-    def printed as Written init writePdf($deck, $r, $pdfTarget, $baseDir);
+    def printed as Written init writePdfWith($deck, $r, $pdfTarget, $baseDir, $pre.root);
     announce($pdfTarget, $printed.bytes, len($deck.slides), $verbose);
     warnOverflow($deck, $printed.pages);
     return OK;

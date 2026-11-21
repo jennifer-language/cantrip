@@ -760,3 +760,81 @@ func testHandoutNumbersOnTheRight() {
     testing.assertTrue($numX > convert.toFloat(HANDOUT_MARGIN) + 100.0);
     testing.assertTrue($numX < $right and $right - $numX < 10.0);
 }
+
+# --- MathML ------------------------------------------------------------
+
+def const MATH as string init '<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>x</mi>' +
+    '<annotation encoding="application/x-tex">x^2</annotation></math>';
+
+# The PDF prints the TeX source a MathML element carries, in monospace; a deck
+# without maths is laid out untouched.
+func testMathMlPrintsItsTexSource() {
+    def deck as slides.Deck init slides.parse("# M\n\nInline " + MATH + " here.\n");
+    def lay as doctree.PdfOptions init layout($deck, defaults());
+    def tree as doctree.Node init printableMaths(markdown.parse($deck.slides[0].body), $lay);
+    def text as string init doctree.text($tree);
+    testing.assertContains($text, "x^2");
+    testing.assertFalse(strings.contains($text, "<math"));
+    def plain as doctree.Node init markdown.parse("# P\n\ntext\n");
+    testing.assertEqual(printableMaths($plain, $lay), $plain);
+    def pages as int init pageCount($deck, defaults());
+    testing.assertEqual($pages, 1);
+}
+
+# --- notes beside handout slides --------------------------------------
+
+func testNotesAreWrappedIntoTheColumn() {
+    def lines as list of string init noteLayout(
+        "Open with why this exists: a deck belongs in version control.",
+        90.0,
+        200.0);
+    testing.assertTrue(len($lines) > 1);
+    for (def line in $lines) {
+        testing.assertTrue(pdf.measureText("Helvetica", HANDOUT_NOTE_SIZE, $line) <= 90);
+    }
+    testing.assertEqual(
+        strings.join($lines, " "),
+        "Open with why this exists: a deck belongs in version control.");
+}
+
+func testABlankLineStartsAParagraph() {
+    def lines as list of string init noteLayout("one\ntwo\n\nthree", 200.0, 200.0);
+    testing.assertEqual($lines, ["one two", "", "three"]);
+}
+
+func testNotesTooLongForTheSlideAreCut() {
+    def long as string init "";
+    for (def i in 0..80) {
+        $long = $long + "word" + convert.toString($i) + " ";
+    }
+    def room as float init convert.toFloat(5 * HANDOUT_NOTE_LEADING);
+    def lines as list of string init noteLayout($long, 90.0, $room);
+    testing.assertEqual(len($lines), 5);
+    testing.assertTrue(strings.endsWith($lines[4], "..."));
+}
+
+func testNothingToPrintIsNoLines() {
+    testing.assertEqual(len(noteLayout("", 90.0, 200.0)), 0);
+    testing.assertEqual(len(noteLayout("  \n ", 90.0, 200.0)), 0);
+    testing.assertEqual(len(noteLayout("text", 90.0, 5.0)), 0);
+    def word as list of string init noteLayout("abcdefghijklmnopqrstuvwxyz", 30.0, 200.0);
+    testing.assertTrue(len($word) > 1);
+    testing.assertEqual(strings.join($word, ""), "abcdefghijklmnopqrstuvwxyz");
+}
+
+# The notes go on the handout page beside their slide; the page count does not
+# change, and a slide without notes keeps its ruled column.
+func testHandoutWithPrintsTheNotes() {
+    def plain as pdf.Document init handout(slidePages(4), theme.stage("16:9"), "", pdf.pageLabel());
+    def got as pdf.Document init handoutWith(
+        slidePages(4),
+        theme.stage("16:9"),
+        "",
+        pdf.pageLabel(),
+        ["Say hello first.", "", "Third slide notes."]);
+    testing.assertEqual(len($got.pages), len($plain.pages));
+    testing.assertContains($got.pages[0].content, "Say hello first.");
+    testing.assertContains($got.pages[0].content, "Third slide notes.");
+    testing.assertFalse(strings.contains($plain.pages[0].content, "Say hello"));
+    testing.assertTrue(HANDOUT_NOTE_LEADING > HANDOUT_NOTE_SIZE);
+}
