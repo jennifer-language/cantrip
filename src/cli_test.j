@@ -975,7 +975,7 @@ func testPreprocessorsRewriteTheDeckAndDrawItsPictures() {
     testing.assertContains($page, '<math xmlns="http://www.w3.org/1998/Math/MathML">');
     testing.assertFalse(strings.contains($page, "DIAGRAM"));
     def printed as bytes init fs.readBytes($out + ".pdf");
-    testing.assertEqual(encoding.decode("utf-8", $printed[..4]), "%PDF");
+    testing.assertEqual(convert.stringFromBytes("utf-8", $printed[..4]), "%PDF");
     testing.assertFalse(fs.exists(path.join($dir, "_generated")));
 }
 
