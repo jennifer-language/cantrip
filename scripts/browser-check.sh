@@ -317,6 +317,12 @@ check "?notes=1 opens it there anyway" 390,844 "$page?notes=1" "open closed full
 check "?mode=dark opens in dark, m back to light" 1280,800 "$page?mode=dark" \
     "open closed full 2 fitted none dark light"
 check "?mode=sepia is ignored" 1280,800 "$page?mode=sepia" "open closed full 2 fitted none light dark"
+# auto follows the system until m picks the other mode; --force-dark-mode is a
+# system that prefers dark.
+check "?mode=auto on a light system, m picks dark" 1280,800 "$page?mode=auto" \
+    "open closed full 2 fitted none auto dark"
+check "?mode=auto on a dark system, m picks light" 1280,800 "$page?mode=auto" \
+    "open closed full 2 fitted none auto light" "--force-dark-mode"
 check "long notes stop at 30% of the window" 1280,800 "file://$work/long-probe.html" \
     "open closed full 1 capped none light dark"
 check "swipes and taps turn the slide, a pinch does not" 390,844 \

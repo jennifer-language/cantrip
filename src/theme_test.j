@@ -132,18 +132,18 @@ func testEveryThemeHasBothModes() {
         testing.assertEqual($dark.monoFont, $light.monoFont);
         testing.assertEqual($dark.radius, $light.radius);
     }
-    testing.assertEqual(modes(), ["light", "dark"]);
+    testing.assertEqual(modes(), ["light", "dark", "auto"]);
 }
 
-/** A mode other than light or dark is refused, naming the two. */
+/** A mode other than light, dark or auto is refused, naming the three. */
 func testModeUnknown() {
     try {
-        mode("auto");
+        mode("sepia");
         testing.assertTrue(false);
     } catch (e) {
         testing.assertEqual($e.kind, "theme");
-        testing.assertContains($e.message, "auto");
-        testing.assertContains($e.message, "light, dark");
+        testing.assertContains($e.message, "sepia");
+        testing.assertContains($e.message, "light, dark, auto");
     }
     try {
         theme("plain", "dim");
@@ -660,3 +660,20 @@ func testCssColoursTokens() {
         testing.assertContains($out, "pre > code > .hljs-" + $cls);
     }
 }
+
+/**
+ * auto follows the reader's system: the dark palette applies under
+ * prefers-color-scheme: dark while the page is in auto, and a palette looked
+ * up for auto is the light one.
+ */
+func testAutoModeFollowsTheSystem() {
+    testing.assertEqual(mode(" Auto "), "auto");
+    testing.assertFalse(theme("plain", "auto").dark);
+    def out as string init css(theme("plain", "light"), theme("plain", "dark"), stage("16:9"));
+    def at as int init strings.indexOf($out, '@media (prefers-color-scheme: dark) {');
+    testing.assertTrue($at > 0);
+    def block as string init $out[$at..];
+    testing.assertContains($block, ':root[data-mode="auto"] {');
+    testing.assertContains($block, "color-scheme: dark;");
+}
+

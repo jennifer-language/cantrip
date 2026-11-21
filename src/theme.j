@@ -667,7 +667,7 @@ export func names() {
  * @return {list of string} the names `theme` accepts as a mode
  */
 export func modes() {
-    return ["light", "dark"];
+    return ["light", "dark", "auto"];
 }
 
 /**
@@ -683,8 +683,10 @@ func themeError(message as string) {
  * Check a mode name.
  *
  * An empty name selects the default, so a deck with no `mode:` key and a
- * caller passing no `--mode` both land here.
- * @param name {string} "light", "dark", or "" for the default
+ * caller passing no `--mode` both land here. `auto` is the mode the reader's
+ * system asks for (`prefers-color-scheme`), decided in the browser; a palette
+ * looked up for it is the light one, which is also what the PDF prints.
+ * @param name {string} "light", "dark", "auto", or "" for the default
  * @return {string} the mode, lower-cased
  * @throws {Error} kind "theme" for any other name
  */
@@ -1146,7 +1148,8 @@ export func hasRatio(name as string) {
  * one pass. Percent delimiters are used because a cooked Jennifer string
  * treats braces as interpolation slots, and a stylesheet is mostly braces.
  * The light palette is the root's; the dark one applies while the page's
- * `<html>` carries `data-mode="dark"`, which the viewer flips with m.
+ * `<html>` carries `data-mode="dark"`, which the viewer flips with m, and
+ * under `data-mode="auto"` when the reader's system prefers dark.
  * @param light {Theme} the theme's light palette, whose fonts and radius are used
  * @param dark {Theme} the theme's dark palette
  * @param s {Stage} the geometry to render for
@@ -1224,6 +1227,11 @@ export func template() {
 
 :root[data-mode="dark"] {
 %dark%}
+
+@media (prefers-color-scheme: dark) {
+    :root[data-mode="auto"] {
+%dark%    }
+}
 
 * { box-sizing: border-box; }
 
