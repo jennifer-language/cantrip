@@ -1391,7 +1391,13 @@ pre {
     color: var(--code-fg);
     border-radius: var(--radius);
     overflow: auto;
-    max-height: 70%;
+    /*
+     * A share of the content height of the slide (the slide has a set
+     * height, so the percentage resolves): a block longer than this scrolls
+     * rather than pushing the slide past its page. 75% shows the longest
+     * blocks in the academy talks (about 417px of 568) without a scrollbar.
+     */
+    max-height: 75%;
 }
 
 pre code {
