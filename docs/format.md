@@ -276,6 +276,11 @@ Only a paragraph that is a single image is drawn into the PDF. An image inline
 in a sentence, in a list item, in a quote, or in a table cell keeps the `[alt]`
 fallback.
 
+In the slideshow a picture is never wider than the slide's content and never
+taller than 60% of the slide, so it leaves room for a heading and a line of
+text; a picture that would be larger, a wide diagram stretched to the slide's
+width included, is shrunk in proportion.
+
 The PDF draws no SVG. For `![x](fig.svg)` it draws `fig.png` from beside
 `fig.svg`, so an SVG picture needs a PNG copy next to it to appear in the PDF;
 without one the PDF shows the alt text. The slideshow shows the SVG itself.

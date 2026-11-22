@@ -677,3 +677,18 @@ func testAutoModeFollowsTheSystem() {
     testing.assertContains($block, "color-scheme: dark;");
 }
 
+/**
+ * A picture is capped in stage pixels: a percentage height has nothing to
+ * resolve against on a slide, and a diagram SVG that only says width="100%"
+ * would be stretched to the slide width and run off the bottom.
+ */
+func testPicturesAreCappedByTheStageHeight() {
+    def out as string init css(theme("plain", "light"), theme("plain", "dark"), stage("16:9"));
+    def at as int init strings.indexOf($out, "\n" + 'img {');
+    testing.assertTrue($at > 0);
+    def rest as string init $out[$at..];
+    def rule as string init $rest[..strings.indexOf($rest, '}')];
+    testing.assertContains($rule, "max-height: calc(var(--stage-h) * 0.6px);");
+    testing.assertContains($rule, "width: auto;");
+    testing.assertFalse(strings.contains($rule, "max-height: 70%"));
+}

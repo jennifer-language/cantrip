@@ -1431,7 +1431,22 @@ th[align="center"], td[align="center"] { text-align: center; }
 th[align="right"], td[align="right"] { text-align: right; }
 th { background: var(--code-bg); font-weight: 600; }
 
-img { max-width: 100%; max-height: 70%; height: auto; display: block; }
+/*
+ * A picture fits the slide: no wider than the content, and no taller than 60%
+ * of the stage, which leaves room for a heading and a line of text. The cap is
+ * in stage pixels because a percentage height has nothing to resolve against
+ * here (the slide content has no set height), and a picture whose SVG says
+ * only width="100%", as a diagram plugin writes it, would otherwise be
+ * stretched to the slide width and run off the bottom. With both caps, the
+ * browser shrinks such a picture in proportion.
+ */
+img {
+    max-width: 100%;
+    max-height: calc(var(--stage-h) * 0.6px);
+    width: auto;
+    height: auto;
+    display: block;
+}
 
 mark { background: var(--accent); color: var(--bg); padding: 0 0.2em; }
 
