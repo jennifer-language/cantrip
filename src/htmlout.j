@@ -1151,7 +1151,32 @@ export func script() {
         });
     }
 
+    // A slide whose content is taller than its area (a long table, say) is
+    // shrunk just enough to fit, by zooming its content; the slide number,
+    // footer and notes keep their size. Never below 60%, so text stays
+    // readable: a slide that still does not fit then overflows as before.
+    // The zoom used is kept in data-fit. Runs again once web fonts load,
+    // since they change the measurements.
+    function shrinkToFit() {
+        slides.forEach(function (s) {
+            var parts = Array.prototype.filter.call(s.children, function (c) {
+                return !c.classList.contains("cantrip-slide-number") &&
+                    !c.classList.contains("cantrip-slide-footer") &&
+                    !c.classList.contains("cantrip-slide-notes");
+            });
+            var zoom = 1;
+            parts.forEach(function (c) { c.style.zoom = ""; });
+            while (s.scrollHeight > s.clientHeight + 1 && zoom > 0.6) {
+                zoom = Math.max(0.6, zoom - 0.04);
+                parts.forEach(function (c) { c.style.zoom = String(zoom); });
+            }
+            if (zoom < 1) { s.dataset.fit = zoom.toFixed(2); } else { delete s.dataset.fit; }
+        });
+    }
+
     help.addEventListener("click", close);
+    shrinkToFit();
+    if (document.fonts && document.fonts.ready) { document.fonts.ready.then(shrinkToFit); }
     window.addEventListener("resize", function () { sizeNotes(); fit(); });
     window.addEventListener("hashchange", function () { show(fromHash(), false); });
     setNotes(startNotes && !!notes);

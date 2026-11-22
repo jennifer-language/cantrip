@@ -837,3 +837,12 @@ func testTheErrorPageEscapesTheMessage() {
     testing.assertContains($page, "&lt;b&gt;");
     testing.assertFalse(strings.contains($page, "<b>\""));
 }
+
+# The script shrinks a slide that is taller than its area; the browser check
+# measures it, this only pins that the script carries it.
+func testTheScriptShrinksTallSlides() {
+    def js as string init script();
+    testing.assertContains($js, "function shrinkToFit()");
+    testing.assertContains($js, "zoom > 0.6");
+    testing.assertContains($js, "document.fonts.ready.then(shrinkToFit)");
+}

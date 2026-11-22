@@ -78,6 +78,43 @@ EOF
 } > "$work/long.md"
 "$JENNIFER" run bin/cantrip html "$work/long.md" --out "$work/long.html" >/dev/null
 
+# A slide taller than its area (a long table): the script shrinks its content
+# to fit and leaves the short slide and the slide number alone.
+{
+    printf -- '---\ntitle: Fit\n---\n\n# Short\n\n---\n\n## A long table\n\n| Row | Text |\n| --- | --- |\n'
+    i=0
+    while [ "$i" -lt 10 ]; do
+        printf '| %s | some text in a cell |\n' "$i"
+        i=$((i + 1))
+    done
+} > "$work/fit.md"
+"$JENNIFER" run bin/cantrip html "$work/fit.md" --out "$work/fit-deck.html" >/dev/null
+# The probe: "<short slide> <long slide> <long slide after> <slide number>".
+cat > "$work/fit.js" <<'EOF2'
+<script>
+window.addEventListener("load", function () {
+    setTimeout(function () {
+        var all = document.querySelectorAll("body > #cantrip-deck > .cantrip-slide");
+        var long = all[1];
+        var r = [
+            all[0].dataset.fit ? "shrunk" : "untouched",
+            long.dataset.fit && Number(long.dataset.fit) < 1 ? "shrunk" : "untouched",
+            long.scrollHeight <= long.clientHeight + 1 ? "fits" : "overflows",
+            long.querySelector(":scope > .cantrip-slide-number").style.zoom === "" ? "number-kept" : "number-zoomed"
+        ];
+        var o = document.createElement("output");
+        o.id = "probe";
+        o.textContent = r.join(" ");
+        document.body.appendChild(o);
+    }, 300);
+});
+</script>
+EOF2
+awk -v probe="$work/fit.js" '
+    /<\/body>/ { while ((getline line < probe) > 0) print line }
+    { print }
+' "$work/fit-deck.html" > "$work/fit.html"
+
 # The probe: "<notes at load> <notes after s> <deck space after s> <slide>
 # <panel at load> <panel after s> <mode at load> <mode after m>". A panel is "none" when closed with the deck
 # at full height, "fitted" when shorter than the cap with the deck ending at its
@@ -317,6 +354,8 @@ check "?notes=1 opens it there anyway" 390,844 "$page?notes=1" "open closed full
 check "?mode=dark opens in dark, m back to light" 1280,800 "$page?mode=dark" \
     "open closed full 2 fitted none dark light"
 check "?mode=sepia is ignored" 1280,800 "$page?mode=sepia" "open closed full 2 fitted none light dark"
+check "a slide taller than its area is shrunk to fit" 1280,800 "file://$work/fit.html" \
+    "untouched shrunk fits number-kept"
 # auto follows the system until m picks the other mode; --force-dark-mode is a
 # system that prefers dark.
 check "?mode=auto on a light system, m picks dark" 1280,800 "$page?mode=auto" \

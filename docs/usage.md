@@ -240,7 +240,10 @@ place and you can link to a slide. `?notes=1` / `?notes=0` and `?overview=1` /
 the page loads (`talk.html?notes=0#4`), and `?mode=light` / `?mode=dark` /
 `?mode=auto` pick the mode, whatever the deck was built with. While
 the notes panel is open, the slide is scaled into the space above it. The slide scales to the window, so the deck
-looks the same on a laptop and a projector.
+looks the same on a laptop and a projector. A slide whose content is taller than the slide (a long table,
+say) is shrunk in the slideshow, just enough to fit, and never below 60%; the
+slide number and footer keep their size. The PDF lays slides out on its own
+and warns about a slide that overflows there.
 
 ### Printing from the browser
 
