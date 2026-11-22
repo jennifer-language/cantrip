@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 /**
  * Build-time syntax highlighting for fenced code blocks.
@@ -1209,7 +1209,7 @@ func classifyWord(word as string, next as string, fresh as bool, l as Lang) {
     if ($l.namespaces and $next == ".") {
         return "built_in";
     }
-    if ($l.constants and isUpper(strings.substring($word, 0, 1)) and
+    if ($l.constants and isUpper($word[..1]) and
         strings.upper($word) == $word) {
         return "symbol";
     }

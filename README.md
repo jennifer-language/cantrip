@@ -82,8 +82,7 @@ names them in `cantrip.toml`; nothing runs that the file does not name.
 jvc app install https://github.com/jennifer-language/cantrip
 ```
 
-Needs the Jennifer interpreter, 0.26.0 or newer (until 0.26.0 is released,
-a development build from its `main` branch). There are no third-party
+Needs the Jennifer interpreter, 0.27.0 or newer. There are no third-party
 dependencies: everything it imports ships with the interpreter, and it needs no
 `net`, `exec`, or `sql` capability, so it runs on `jennifer-tiny` too.
 

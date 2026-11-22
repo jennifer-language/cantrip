@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 /**
  * White-box tests for the themes and the stage geometry.
@@ -277,7 +277,7 @@ func testOverlaysSetTheirOwnTextColour() {
         def out as string init css(theme($name, "light"), theme($name, "dark"), stage("16:9"));
         def at as int init strings.indexOf($out, 'body > #cantrip-help kbd {');
         testing.assertTrue($at >= 0);
-        def rule as string init strings.substring($out, $at, strings.indexOf($out, '}', $at));
+        def rule as string init $out[$at..strings.indexOf($out, '}', $at)];
         testing.assertContains($rule, "color: #e6e8ee;");
         testing.assertContains($out, 'body > #cantrip-notes code, body > #cantrip-notes kbd {');
     }

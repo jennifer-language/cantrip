@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 /**
  * Render a deck as one self-contained HTML slideshow.
@@ -519,16 +519,16 @@ export func keyCaps(html as string) {
     while ($at < len($html)) {
         def open as int init strings.indexOf($html, "<code", $at);
         if ($open < 0) {
-            $parts[] = unescapeKbd(strings.substring($html, $at, len($html)));
+            $parts[] = unescapeKbd($html[$at..len($html)]);
             break;
         }
-        $parts[] = unescapeKbd(strings.substring($html, $at, $open));
+        $parts[] = unescapeKbd($html[$at..$open]);
         def close as int init strings.indexOf($html, "</code>", $open);
         if ($close < 0) {
-            $parts[] = strings.substring($html, $open, len($html));
+            $parts[] = $html[$open..len($html)];
             break;
         }
-        $parts[] = strings.substring($html, $open, $close + len("</code>"));
+        $parts[] = $html[$open..$close + len("</code>")];
         $at = $close + len("</code>");
     }
     return strings.join($parts, "");

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 /**
  * White-box tests for the command line.
@@ -15,7 +15,6 @@
 
 use testing;
 use maps;
-use binary;
 use encoding;
 use os;
 use json;
@@ -214,11 +213,11 @@ func testReadDeckRefusesAnOversizedFile() {
     defer fs.removeAll($tmp);
     def big as string init writeDeck(
         $tmp,
-        "# A\n\n" + strings.repeat("x", MAX_DECK_BYTES),
+        "# A\n\n" + strings.replicate("x", MAX_DECK_BYTES),
         "big.md");
     testing.assertEqual(readFailure([$big]), "limit");
     testing.assertEqual(run(["cantrip", "info", $big]), FAILED);
-    def edge as string init writeDeck($tmp, strings.repeat("x", MAX_DECK_BYTES), "edge.md");
+    def edge as string init writeDeck($tmp, strings.replicate("x", MAX_DECK_BYTES), "edge.md");
     testing.assertEqual(readFailure([$edge]), "");
 }
 
@@ -229,7 +228,7 @@ func testReadDeckRefusesAnOversizedFile() {
 func testReadDeckRefusesTooManySlides() {
     def tmp as string init fs.makeTempDir();
     defer fs.removeAll($tmp);
-    def half as string init strings.repeat("a\n\n---\n\n", MAX_SLIDES // 2);
+    def half as string init strings.replicate("a\n\n---\n\n", MAX_SLIDES // 2);
     def one as string init writeDeck($tmp, $half, "one.md");
     def two as string init writeDeck($tmp, $half + "b\n", "two.md");
     testing.assertEqual(readFailure([$one]), "");
@@ -459,7 +458,7 @@ func testWritePdf() {
     testing.assertEqual($w.pages, 2);
     def got as bytes init fs.readBytes($target);
     testing.assertEqual(len($got), $w.bytes);
-    testing.assertEqual(convert.stringFromBytes("utf-8", binary.slice($got, 0, 5)), "%PDF-");
+    testing.assertEqual(encoding.decode("utf-8", $got[..5]), "%PDF-");
 }
 
 /** The handout reports the slide pages, not its own A4 pages. */
@@ -472,7 +471,7 @@ func testWriteHandout() {
     testing.assertEqual($w.pages, 2);
     def got as bytes init fs.readBytes($target);
     testing.assertEqual(len($got), $w.bytes);
-    testing.assertEqual(convert.stringFromBytes("utf-8", binary.slice($got, 0, 5)), "%PDF-");
+    testing.assertEqual(encoding.decode("utf-8", $got[..5]), "%PDF-");
 }
 
 /**
@@ -594,7 +593,7 @@ func testDispatchHandout() {
     testing.assertTrue(fs.isFile($out));
     testing.assertFalse(fs.exists(stem($target) + ".pdf"));
     def head as bytes init fs.readBytes($out);
-    testing.assertEqual(convert.stringFromBytes("utf-8", $head[0..5]), "%PDF-");
+    testing.assertEqual(encoding.decode("utf-8", $head[0..5]), "%PDF-");
     def named as string init path.join($tmp, "print.pdf");
     testing.assertEqual(
         dispatch("handout", [$target], parsed(["handout", $target, "-o", $named])),
@@ -977,7 +976,7 @@ func testPreprocessorsRewriteTheDeckAndDrawItsPictures() {
     testing.assertContains($page, '<math xmlns="http://www.w3.org/1998/Math/MathML">');
     testing.assertFalse(strings.contains($page, "DIAGRAM"));
     def printed as bytes init fs.readBytes($out + ".pdf");
-    testing.assertEqual(convert.stringFromBytes("utf-8", $printed[..4]), "%PDF");
+    testing.assertEqual(encoding.decode("utf-8", $printed[..4]), "%PDF");
     testing.assertFalse(fs.exists(path.join($dir, "_generated")));
 }
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 /**
  * Presentation appearance: the named themes and the stage each deck is laid
@@ -18,6 +18,7 @@ use strings;
 use lists;
 use convert;
 use math;
+use io;
 
 /** The theme used when a deck names none. */
 export def const DEFAULT_THEME as string init "plain";
@@ -737,7 +738,7 @@ export func theme(name as string, modeName as string) {
         $instead = "plain";
     }
     if (strings.endsWith($want, "-dark")) {
-        def base as string init strings.substring($want, 0, len($want) - 5);
+        def base as string init $want[..len($want) - 5];
         if (lists.contains(names(), $base)) {
             $instead = $base;
         }
@@ -808,7 +809,7 @@ export def struct Rgb {
 export func hexRgb(hex as string) {
     def bare as string init strings.lower(strings.trim($hex));
     if (strings.startsWith($bare, "#")) {
-        $bare = strings.substring($bare, 1, len($bare));
+        $bare = $bare[1..len($bare)];
     }
     if (len($bare) == 3) {
         def wide as string init "";
@@ -837,7 +838,7 @@ export func hexRgb(hex as string) {
  * @throws {Error} kind "theme" when the pair is not hexadecimal
  */
 export func channel(bare as string, at as int) {
-    def pair as string init strings.substring($bare, $at, $at + 2);
+    def pair as string init $bare[$at..$at + 2];
     try {
         return convert.toInt($pair, 16);
     } catch (e) {
@@ -1115,7 +1116,7 @@ export func rgbHex(c as Rgb) {
  * @return {string} two lower-case digits
  */
 func hexPair(v as int) {
-    def digits as string init convert.toString($v, 16);
+    def digits as string init io.sprintf("%d|base=16", $v);
     if (len($digits) < 2) {
         return "0" + $digits;
     }

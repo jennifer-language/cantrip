@@ -171,7 +171,7 @@ grimoire build --config grimoire.toml --pdf  # the site plus a printable book
 grimoire serve --config grimoire.toml        # preview on :8080
 ```
 
-Grimoire needs Jennifer 0.26.0 or newer, the same floor as `cantrip` itself.
+Grimoire needs Jennifer 0.27.0 or newer, the same floor as `cantrip` itself.
 Any `-dev` build bypasses the floor.
 
 ## Releasing

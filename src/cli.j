@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 /**
  * The command line: parse arguments, read the Markdown, write the outputs.
@@ -196,7 +196,7 @@ export func printable(text as string) {
  * @return {string} the digits
  */
 export func hexDigits(n as int, width as int) {
-    def digits as string init strings.upper(convert.toString($n, 16));
+    def digits as string init strings.upper(io.sprintf("%d|base=16", $n));
     while (len($digits) < $width) {
         $digits = "0" + $digits;
     }
@@ -612,7 +612,7 @@ export func preprocess(
         $out = plugin.merge($spec, $out, $reply);
     }
     for (def c in $out) {
-        def size as int init len(convert.bytesFromString("utf-8", $c.content));
+        def size as int init len(encoding.encode("utf-8", $c.content));
         if ($size > MAX_DECK_BYTES) {
             throw tooLarge($c.src, $size);
         }
@@ -983,7 +983,7 @@ export func writeHtmlIn(
     baseDir as string) {
     def out as string init renderHtmlIn($deck, $r, $root, $baseDir);
     fs.writeString($target, $out);
-    return Written{bytes: len(convert.bytesFromString("utf-8", $out)), pages: 0};
+    return Written{bytes: len(encoding.encode("utf-8", $out)), pages: 0};
 }
 
 /**
@@ -1315,7 +1315,7 @@ export func run(argv as list of string) {
         return MISUSE;
     }
     def verb as string init $rest[0];
-    def files as list of string init lists.tail($rest, len($rest) - 1);
+    def files as list of string init $rest[len($rest) - (len($rest) - 1)..];
     if (not lists.contains(commands(), $verb)) {
         io.eprintf(
             "%s: unknown command \"%s\"; try one of: %s\n",

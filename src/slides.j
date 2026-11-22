@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 /**
  * The slide-deck model: Markdown source in, an ordered deck of slides out.
@@ -13,7 +13,6 @@
  */
 
 use strings;
-use lists;
 use maps;
 use convert;
 
@@ -163,7 +162,7 @@ export func metaKey(line as string) {
     if ($at < 1) {
         return "";
     }
-    return strings.lower(strings.trim(strings.substring($bare, 0, $at)));
+    return strings.lower(strings.trim($bare[..$at]));
 }
 
 /**
@@ -180,7 +179,7 @@ export func metaValue(line as string) {
     if ($at < 0) {
         return "";
     }
-    return unquote(strings.trim(strings.substring($bare, $at + 1)));
+    return unquote(strings.trim($bare[$at + 1..]));
 }
 
 /**
@@ -192,10 +191,10 @@ export func unquote(value as string) {
     if (len($value) < 2) {
         return $value;
     }
-    def head as string init strings.substring($value, 0, 1);
-    def tail as string init strings.substring($value, len($value) - 1, len($value));
+    def head as string init $value[..1];
+    def tail as string init $value[len($value) - 1..len($value)];
     if ($head == $tail and ($head == "\"" or $head == "'")) {
-        return strings.substring($value, 1, len($value) - 1);
+        return $value[1..len($value) - 1];
     }
     return $value;
 }
@@ -215,7 +214,7 @@ export func fenceOf(line as string) {
     if (not strings.startsWith($bare, "```") and not strings.startsWith($bare, "~~~")) {
         return "";
     }
-    def mark as string init strings.substring($bare, 0, 1);
+    def mark as string init $bare[..1];
     def run as string init "";
     for (def ch in strings.chars($bare)) {
         if ($ch != $mark) {
@@ -236,7 +235,7 @@ export func closesFence(marker as string, fence as string) {
     if ($marker == "" or $fence == "") {
         return false;
     }
-    if (strings.substring($marker, 0, 1) != strings.substring($fence, 0, 1)) {
+    if ($marker[..1] != $fence[..1]) {
         return false;
     }
     return len($marker) >= len($fence);
@@ -315,7 +314,7 @@ export func chunks(body as string) {
  * @return {bool} true when an inline code span is open at `at`
  */
 export func insideCodeSpan(line as string, at as int) {
-    def before as string init strings.substring($line, 0, $at);
+    def before as string init $line[..$at];
     return (len(strings.split($before, "`")) - 1) % 2 == 1;
 }
 
@@ -368,9 +367,9 @@ export func takeNotes(source as string) {
                 $noteLines[] = $rest;
                 continue;
             }
-            $noteLines[] = strings.substring($rest, 0, $stop);
+            $noteLines[] = $rest[..$stop];
             $found[] = strings.trim(strings.join($noteLines, "\n"));
-            $rest = $pre + strings.substring($rest, $stop + len(NOTE_CLOSE), len($rest));
+            $rest = $pre + $rest[$stop + len(NOTE_CLOSE)..len($rest)];
             $open = false;
             $pre = "";
             $raw = [];
@@ -389,14 +388,14 @@ export func takeNotes(source as string) {
         # Prose: lift each complete note on the line; one left open runs on.
         def start as int init noteStart($rest, 0);
         while ($start >= 0) {
-            def after as string init strings.substring($rest, $start + len(NOTE_OPEN), len($rest));
+            def after as string init $rest[$start + len(NOTE_OPEN)..len($rest)];
             def stop as int init strings.indexOf($after, NOTE_CLOSE);
             if ($stop < 0) {
                 break;
             }
-            $found[] = strings.trim(strings.substring($after, 0, $stop));
-            $rest = strings.substring($rest, 0, $start) +
-                strings.substring($after, $stop + len(NOTE_CLOSE), len($after));
+            $found[] = strings.trim($after[..$stop]);
+            $rest = $rest[..$start] +
+                $after[$stop + len(NOTE_CLOSE)..len($after)];
             $start = noteStart($rest, $start);
         }
         if ($start < 0) {
@@ -404,9 +403,9 @@ export func takeNotes(source as string) {
             continue;
         }
         $open = true;
-        $pre = strings.substring($rest, 0, $start);
+        $pre = $rest[..$start];
         $raw = [$rest];
-        $noteLines = [strings.substring($rest, $start + len(NOTE_OPEN), len($rest))];
+        $noteLines = [$rest[$start + len(NOTE_OPEN)..len($rest)]];
     }
     if ($open) {
         for (def line in $raw) {
@@ -465,14 +464,14 @@ export func kbdToCode(source as string) {
             if ($stop < 0) {
                 break;
             }
-            def key as string init strings.substring($rest, $inner, $stop);
+            def key as string init $rest[$inner..$stop];
             if (insideCodeSpan($rest, $at) or strings.contains($key, "`")) {
                 $at = strings.indexOf($rest, KBD_OPEN, $inner);
                 continue;
             }
             def swapped as string init "`" + $key + "`";
-            $rest = strings.substring($rest, 0, $at) + $swapped +
-                strings.substring($rest, $stop + len(KBD_CLOSE), len($rest));
+            $rest = $rest[..$at] + $swapped +
+                $rest[$stop + len(KBD_CLOSE)..len($rest)];
             $at = strings.indexOf($rest, KBD_OPEN, $at + len($swapped));
         }
         $out[] = $rest;
@@ -512,7 +511,7 @@ export func tidy(source as string) {
         $blank = $empty;
     }
     while (len($out) > 0 and strings.trim($out[len($out) - 1]) == "") {
-        $out = lists.head($out, len($out) - 1);
+        $out = $out[..len($out) - 1];
     }
     return strings.join($out, "\n");
 }
@@ -608,7 +607,7 @@ export func slideCount(source as string) {
  */
 export func withoutBom(source as string) {
     if (strings.startsWith($source, BOM)) {
-        return strings.substring($source, 1, len($source));
+        return $source[1..len($source)];
     }
     return $source;
 }

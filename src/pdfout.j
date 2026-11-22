@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 /**
  * Render a deck as a paginated PDF, one page per slide.
@@ -1165,7 +1165,7 @@ export func paintPage(src as list of string, plan as Plan, pen as Ink, start as 
         }
         def pl as PaintLine init $plan.blocks[$c.block].lines[$c.line];
         def tj as string init $src[$i + 3];
-        def k as int init runEnd($pl, $c.at, strings.substring($tj, 1, len($tj) - 4));
+        def k as int init runEnd($pl, $c.at, $tj[1..len($tj) - 4]);
         if ($k < 0) {
             # Not the text expected: leave the rest of this block as laid out.
             $c.active = false;

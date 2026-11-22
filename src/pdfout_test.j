@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 /**
  * White-box tests for the PDF renderer.
@@ -11,7 +11,6 @@
 
 use testing;
 use maps;
-use binary;
 use convert;
 use regex;
 use encoding;
@@ -252,7 +251,7 @@ func testHandoutPutsThreeSlidesOnA4() {
     testing.assertFalse(strings.contains($first.content, "slide 3"));
     testing.assertContains($got.pages[1].content, "slide 3");
     testing.assertEqual(len($first.annots), 3);
-    testing.assertEqual(convert.stringFromBytes("utf-8", pdf.render($got)[0..5]), "%PDF-");
+    testing.assertEqual(encoding.decode("utf-8", pdf.render($got)[0..5]), "%PDF-");
 }
 
 /** A slide keeps its proportions, fits the margins, and leaves room for notes. */
@@ -313,7 +312,7 @@ func testHandoutTitleOnEveryPage() {
     testing.assertContains(
         $titled.pages[0].content,
         "/Helvetica-Bold " + convert.toString(HANDOUT_TITLE_SIZE) + " Tf");
-    def long as string init strings.repeat("A very long title ", 12);
+    def long as string init strings.replicate("A very long title ", 12);
     def cut as pdf.Document init handout(
         slidePages(1),
         theme.stage("16:9"),
@@ -412,7 +411,7 @@ func testFooterOutsideWinAnsi() {
 func testRender() {
     def out as bytes init render(fixture(), defaults());
     testing.assertTrue(len($out) > 500);
-    def head as string init convert.stringFromBytes("utf-8", binary.slice($out, 0, 5));
+    def head as string init encoding.decode("utf-8", $out[..5]);
     testing.assertEqual($head, "%PDF-");
     testing.assertEqual(pageCount(fixture(), defaults()), 3);
 }
@@ -580,7 +579,7 @@ func testUnhighlightedIsUnchanged() {
  * coloured, and the text drawn is still the line.
  */
 func testWrappedLineIsColoured() {
-    def long as string init "io.printf(\"" + strings.repeat("word ", 40) + "\", $value);";
+    def long as string init "io.printf(\"" + strings.replicate("word ", 40) + "\", $value);";
     def deck as slides.Deck init slides.parse("# W\n\n```jennifer\n" + $long + "\n```\n");
     def got as string init contentOf(document($deck, defaults()));
     def s as theme.Syntax init theme.printSyntax(theme.theme("plain", "light"));

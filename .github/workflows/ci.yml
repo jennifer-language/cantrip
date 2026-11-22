@@ -17,10 +17,10 @@ permissions:
 env:
   # The interpreter CI runs against: a release (X.Y.Z, installed from its
   # checksummed .deb) or a commit of Jennifer's main branch (built with Go).
-  # It is the floor in deck.toml, 0.26.0; bumping it is how the project moves
+  # It is the floor in deck.toml, 0.27.0; bumping it is how the project moves
   # to a newer language. Not named JENNIFER: scripts/check.sh reads that as the
   # path of the interpreter to run.
-  JENNIFER_REF: "0.26.0"
+  JENNIFER_REF: "0.27.0"
 
 jobs:
   check:
