@@ -2,7 +2,7 @@
 
 ## What you need first
 
-The [Jennifer interpreter](https://jennifer-lang.dev/), **0.27.0 or newer**.
+The [Jennifer interpreter](https://jennifer-lang.dev/), **0.28.0 or newer**.
 0.26.0 lacks `encoding.encode` / `encoding.decode` and `strings.replicate`,
 which `cantrip` uses.
 `deck.toml` declares that floor, so `jvc check` will tell you if the
