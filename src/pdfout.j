@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 /**
  * Render a deck as a paginated PDF, one page per slide.
@@ -484,7 +484,7 @@ export func handoutWith(
             $sheet = pdf.text(
                 $sheet,
                 convert.toInt(math.round($x + $w - pdf.measureText("Helvetica", 7, $shown))),
-                convert.toInt($y) - 10,
+                math.trunc($y) - 10,
                 "Helvetica",
                 7,
                 $shown);
