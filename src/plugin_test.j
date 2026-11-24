@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 /**
  * White-box tests for `plugin.j`, run by `jennifer test src/plugin_test.j`.
@@ -86,6 +86,14 @@ func testJsonOfCarriesEveryTomlType() {
     testing.assertEqual(json.asFloat($back, "/b"), 2.5);
     testing.assertContains(json.asString($back, "/c"), "1979-05-27");
     testing.assertFalse(json.asBool($back, "/t/k"));
+}
+
+func testJsonOfCarriesLocalDatesAsTomlText() {
+    def doc as toml.Value init toml.decode(
+        "d = 0979-05-07\nt = 07:32:00.25\ndt = 1979-05-27T07:32:00\n");
+    testing.assertEqual(jsonOf($doc, "/d"), '"0979-05-07"');
+    testing.assertEqual(jsonOf($doc, "/t"), '"07:32:00.25"');
+    testing.assertEqual(jsonOf($doc, "/dt"), '"1979-05-27T07:32:00"');
 }
 
 # --- lookup ------------------------------------------------------------

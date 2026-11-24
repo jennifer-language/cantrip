@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 /**
  * Preprocessors: programs that rewrite a deck's Markdown before it is rendered,
@@ -37,6 +37,7 @@
 use strings;
 use json;
 use toml;
+use io;
 use maps;
 use time;
 use convert;
@@ -162,7 +163,8 @@ export func pointerKey(key as string) {
 
 /**
  * A TOML node as JSON text: a plugin receives its own table, and the wire
- * format is JSON. A date-time goes over as its RFC 3339 text.
+ * format is JSON. An offset date-time goes over as its RFC 3339 text, a
+ * local date, time or date-time as its TOML text.
  * @param doc {toml.Value} the document
  * @param ptr {string} the node's pointer
  * @return {string} the node as JSON
@@ -191,7 +193,39 @@ export func jsonOf(doc as toml.Value, ptr as string) {
         }
         return "false"; }
         when "datetime" { return json.encode(time.iso(toml.asDatetime($doc, $ptr))); }
+        when "local-date", "local-time", "local-datetime" {
+            return json.encode(localText($doc, $ptr, toml.typeOf($doc, $ptr)));
+        }
         else { return "null"; }
+    }
+}
+
+# localText renders a TOML local date, time or date-time as its TOML text, which
+# is also its ISO 8601 form: a local value has no offset, so it has no RFC 3339
+# text and no instant to convert.
+func localText(doc as toml.Value, ptr as string, form as string) {
+    def l as toml.Local init toml.asLocal($doc, $ptr);
+    def date as string init io.sprintf(
+        "%d|pad=4|fill=0-%d|pad=2|fill=0-%d|pad=2|fill=0",
+        $l.year,
+        $l.month,
+        $l.day);
+    def clock as string init io.sprintf(
+        "%d|pad=2|fill=0:%d|pad=2|fill=0:%d|pad=2|fill=0",
+        $l.hour,
+        $l.minute,
+        $l.second);
+    if ($l.nanosecond > 0) {
+        def frac as string init io.sprintf("%d|pad=9|fill=0", $l.nanosecond);
+        while (strings.endsWith($frac, "0")) {
+            $frac = $frac[..len($frac) - 1];
+        }
+        $clock = $clock + "." + $frac;
+    }
+    match ($form) {
+        when "local-date" { return $date; }
+        when "local-time" { return $clock; }
+        else { return $date + "T" + $clock; }
     }
 }
 
