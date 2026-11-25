@@ -1037,7 +1037,9 @@ func testAMissingPluginIsNamedBothWays() {
     } catch (e) {
         $message = $e.message;
     }
-    testing.assertContains($message, "nothing named cantrip-zzznothere was found");
+    testing.assertContains(
+        $message,
+        "nothing named cantrip-zzznothere or grimoire-zzznothere was found");
 }
 
 func testAProgramInTheDeckIsFoundByPath() {

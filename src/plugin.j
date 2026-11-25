@@ -493,6 +493,18 @@ export func listing(plan as list of Resolved) {
 }
 
 /**
+ * The programs looked for, in the order tried, joined with " or ": what a
+ * message names when none of them was found.
+ * @param r {Resolved} the resolved plugin
+ * @return {string} for example "cantrip-mermaid or grimoire-mermaid"
+ */
+export func wanted(r as Resolved) {
+    return strings.join(
+        candidates(Plugin{name: $r.name, command: $r.command, args: [], settings: '{}'}),
+        " or ");
+}
+
+/**
  * The plugins worth a warning before a build runs: one that came from `PATH`
  * or from outside the deck cannot be reviewed by reading the deck, and one
  * that is missing will stop the build.
@@ -506,10 +518,8 @@ export func concerns(plan as list of Resolved) {
             continue;
         }
         if ($r.origin == NOWHERE) {
-            $out[] = "preprocessor " + $r.name + ": nothing named " +
-                strings.join(
-                candidates(Plugin{name: $r.name, command: $r.command, args: [], settings: '{}'}),
-                " or ") + " was found; the build will stop when it runs";
+            $out[] = "preprocessor " + $r.name + ": nothing named " + wanted($r) +
+                " was found; the build will stop when it runs";
             continue;
         }
         if ($r.origin == ON_PATH) {

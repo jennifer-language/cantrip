@@ -112,6 +112,19 @@ func testADefaultCommandFallsBackToGrimoire() {
     testing.assertEqual(candidates($spec), ["./tools/draw"]);
 }
 
+func testAMissingPluginNamesEveryCandidate() {
+    def r as Resolved init Resolved{
+        name: "mermaid",
+        command: "cantrip-mermaid",
+        args: [],
+        path: "",
+        origin: NOWHERE
+    };
+    testing.assertEqual(wanted($r), "cantrip-mermaid or grimoire-mermaid");
+    $r.command = "./tools/draw";
+    testing.assertEqual(wanted($r), "./tools/draw");
+}
+
 # --- the request and the reply ----------------------------------------
 
 func deckBook() {

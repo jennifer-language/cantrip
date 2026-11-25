@@ -532,7 +532,7 @@ func runOne(found as plugin.Resolved, body as string, verbose as bool) {
     if ($found.path == "") {
         throw pluginError(
             $found.name,
-            "nothing named " + $found.command + " was found (see `cantrip plugins`)");
+            "nothing named " + plugin.wanted($found) + " was found (see `cantrip plugins`)");
     }
     if ($verbose) {
         io.printf("  plugin  preprocessor %s  ->  %s\n", $found.name, printable($found.path));
