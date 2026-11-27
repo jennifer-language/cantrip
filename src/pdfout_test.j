@@ -283,6 +283,33 @@ func testHandoutMovesBookmarks() {
     testing.assertTrue($got.outline[1].y > $got.outline[2].y);
 }
 
+/**
+ * The credit is off by default. Turned on, it is drawn on the first page only,
+ * grey, at the footer's left margin one line above the footer text (on the
+ * footer's line when that is empty), with a link over the address.
+ */
+func testCredit() {
+    def plain as pdf.Document init document(fixture(), defaults());
+    def opts as Options init defaults();
+    $opts.credit = true;
+    def got as pdf.Document init document(fixture(), $opts);
+    testing.assertFalse(strings.contains($plain.pages[0].content, "Powered by"));
+    testing.assertContains($got.pages[0].content, "Powered by Jennifer's Cantrip");
+    testing.assertFalse(strings.contains($got.pages[1].content, "Powered by"));
+    testing.assertEqual(len($got.pages[0].annots), len($plain.pages[0].annots) + 1);
+    def a as pdf.LinkAnnot init $got.pages[0].annots[len($got.pages[0].annots) - 1];
+    testing.assertEqual($a.uri, "https://github.com/jennifer-language/cantrip");
+    testing.assertTrue($a.x > 36);
+    # The deck has a title, so the footer's left holds it and the credit goes above.
+    testing.assertEqual($a.y, 36 + 9 + 4 - CREDIT_SIZE // 4);
+    def bare as pdf.PageLabel init pdf.pageLabel();
+    def low as pdf.Document init credit($plain, $bare);
+    testing.assertEqual(
+        $low.pages[0].annots[len($low.pages[0].annots) - 1].y,
+        36 - CREDIT_SIZE // 4);
+    testing.assertEqual(len(credit(pdf.document(), $bare).pages), 0);
+}
+
 /** The handout footer carries the --footer text and always numbers its pages. */
 func testHandoutFooterNumbersPages() {
     def opts as Options init defaults();

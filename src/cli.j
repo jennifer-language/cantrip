@@ -35,7 +35,7 @@ import "./highlight.j" as highlight;
 import "./plugin.j" as plugin;
 
 /** The application version, and the version `--version` reports. */
-export def const VERSION as string init "0.8.1";
+export def const VERSION as string init "0.9.0";
 
 /** The command name, as installed on PATH. */
 export def const PROGRAM as string init "cantrip";
@@ -137,6 +137,7 @@ export func parser() {
     $p = args.flag($p, "start-slide", "", "", "HTML: the slide to open on, from 1");
     $p = args.flag($p, "overview", "", "", "HTML: overview open or closed at start");
     $p = args.boolFlag($p, "no-numbers", "", "omit slide numbers");
+    $p = args.boolFlag($p, "credit", "", "name cantrip, with a link, on the first slide");
     $p = args.boolFlag($p, "raw-html", "", "pass raw HTML in the Markdown through unescaped");
     $p = args.flag($p, "addr", "a", DEFAULT_ADDR, "serve: the address to listen on");
     $p = args.boolFlag($p, "verbose", "v", "report what was written");
@@ -830,6 +831,7 @@ export func htmlOptions(r as args.Result) {
     $out.footer = args.asString($r, "footer");
     $out.notes = not args.asBool($r, "no-notes");
     $out.numbers = not args.asBool($r, "no-numbers");
+    $out.credit = args.asBool($r, "credit");
     $out.rawHtml = args.asBool($r, "raw-html");
     $out.transition = args.asString($r, "transition");
     $out.startNotes = args.asString($r, "notes-panel");
@@ -883,6 +885,7 @@ export func pdfOptions(r as args.Result) {
     $out.footer = args.asString($r, "footer");
     $out.notes = args.asBool($r, "notes");
     $out.numbers = not args.asBool($r, "no-numbers");
+    $out.credit = args.asBool($r, "credit");
     $out.bookmarks = bookmarkDepth(args.asString($r, "bookmarks"));
     return $out;
 }

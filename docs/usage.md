@@ -109,6 +109,7 @@ it with <kbd>Ctrl</kbd>+<kbd>C</kbd>. It needs the default `jennifer`, since
 | `--start-slide N` | HTML: the slide the page opens on, from 1 | the deck's `slide:`, else `1` |
 | `--overview open\|closed` | HTML: open in the slide overview | the deck's `overview:`, else `closed` |
 | `--no-numbers` | omit slide numbers | off |
+| `--credit` | on the first slide, "Powered by Jennifer's Cantrip - Markdown into slide decks" and a link to cantrip's repository; in the HTML bottom right above the slide number, in the PDF bottom left above the footer text (so in the handout's first slide too) | off |
 | `--raw-html` | pass raw HTML through unescaped | off |
 | `-v`, `--verbose` | report byte counts, and each image skipped and why | off |
 | `-a`, `--addr ADDR` | `serve`: the address to listen on | `127.0.0.1:8080` |

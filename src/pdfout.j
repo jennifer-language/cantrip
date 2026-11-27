@@ -74,6 +74,8 @@ export def const CODE_MARK as string init "#010203";
  * @field footer {string} text shown bottom-left on every page
  * @field notes {bool} print each slide's speaker notes under its body
  * @field numbers {bool} draw a `page / total` footer
+ * @field credit {bool} name cantrip, with a link, at the foot of the first
+ *     page on the left, above the footer text, clear of the page numbers
  * @field bookmarks {int} heading depth to add to the PDF outline, 0 for none
  * @field highlight {bool} colour code blocks in a language `highlight` knows;
  *     the deck's `highlight: false` turns it off too
@@ -85,6 +87,7 @@ export def struct Options {
     footer as string,
     notes as bool,
     numbers as bool,
+    credit as bool,
     bookmarks as int,
     highlight as bool,
     images as map of string to pdf.Image
@@ -105,6 +108,7 @@ export func defaults() {
         footer: "",
         notes: false,
         numbers: true,
+        credit: false,
         bookmarks: 2,
         highlight: true,
         images: {}
@@ -1293,10 +1297,55 @@ export func document(deck as slides.Deck, opts as Options) {
     }
     def doc as pdf.Document init magnify($laid, pickStage($deck, $opts));
     def label as pdf.PageLabel init footer($deck, $opts);
+    if ($opts.credit) {
+        $doc = credit($doc, $label);
+    }
     if ($label.left != "" or $label.right != "") {
         $doc = pdf.setFooter($doc, $label);
     }
     return $doc;
+}
+
+/** The credit's size, in points: a step below the footer's. */
+export def const CREDIT_SIZE as int init 8;
+
+/**
+ * Draw the credit on the first page: at the footer's left margin, on the
+ * footer's line when that has no text on the left, else one line above it,
+ * so the page numbers on the right stay clear. Grey like a handout footer,
+ * with the address a link. It is drawn into the page, not into the running
+ * footer, so the handout's picture of the first slide carries it too.
+ * @param doc {pdf.Document} the laid-out, scaled document
+ * @param label {pdf.PageLabel} the running footer the document will get
+ * @return {pdf.Document} the document with the credit on its first page
+ */
+export func credit(doc as pdf.Document, label as pdf.PageLabel) {
+    if (len($doc.pages) == 0) {
+        return $doc;
+    }
+    def y as int init $label.margin;
+    if ($label.left != "") {
+        $y = $y + $label.size + 4;
+    }
+    def lead as string init slides.CREDIT + ", ";
+    def at as int init $label.margin +
+        convert.toInt(math.round(pdf.measureText("Helvetica", CREDIT_SIZE, $lead)));
+    def urlWidth as int init convert.toInt(
+        math.round(pdf.measureText("Helvetica", CREDIT_SIZE, slides.CREDIT_URL)));
+    def pg as pdf.Page init $doc.pages[0];
+    $pg = pdf.color($pg, 110, 110, 110);
+    $pg = pdf.text($pg, $label.margin, $y, "Helvetica", CREDIT_SIZE, $lead + slides.CREDIT_URL);
+    $pg = pdf.color($pg, 0, 0, 0);
+    $pg = pdf.link(
+        $pg,
+        $at,
+        $y - CREDIT_SIZE // 4,
+        $urlWidth,
+        CREDIT_SIZE + CREDIT_SIZE // 4,
+        slides.CREDIT_URL);
+    def out as pdf.Document init $doc;
+    $out.pages[0] = $pg;
+    return $out;
 }
 
 /**

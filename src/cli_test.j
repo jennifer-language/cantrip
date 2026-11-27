@@ -366,6 +366,8 @@ func testHtmlOptions() {
     testing.assertTrue($plain.notes);
     testing.assertTrue($plain.numbers);
     testing.assertFalse($plain.rawHtml);
+    testing.assertFalse($plain.credit);
+    testing.assertTrue(htmlOptions(parsed(["html", "a.md", "--credit"])).credit);
     def r as args.Result init parsed([
         "html",
         "a.md",
@@ -398,6 +400,8 @@ func testPdfOptions() {
     testing.assertFalse($plain.notes);
     testing.assertTrue($plain.numbers);
     testing.assertEqual($plain.bookmarks, 2);
+    testing.assertFalse($plain.credit);
+    testing.assertTrue(pdfOptions(parsed(["pdf", "a.md", "--credit"])).credit);
     def r as args.Result init parsed(["pdf", "a.md", "-n", "--no-numbers", "--bookmarks", "0"]);
     def got as pdfout.Options init pdfOptions($r);
     testing.assertTrue($got.notes);

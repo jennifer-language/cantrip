@@ -43,6 +43,8 @@ export def const DEFAULT_TRANSITION as string init "fade";
  * @field footer {string} text shown bottom-left on every slide
  * @field notes {bool} embed speaker notes for the presenter panel
  * @field numbers {bool} show the slide counter bottom-right
+ * @field credit {bool} name cantrip, with a link, in the first slide's
+ *     bottom-right corner, above the counter
  * @field rawHtml {bool} pass raw HTML in the Markdown through unescaped
  * @field highlight {bool} colour code blocks in a language `highlight` knows;
  *     the deck's `highlight: false` turns it off too
@@ -65,6 +67,7 @@ export def struct Options {
     footer as string,
     notes as bool,
     numbers as bool,
+    credit as bool,
     rawHtml as bool,
     highlight as bool,
     transition as string,
@@ -101,6 +104,7 @@ export func defaults() {
         footer: "",
         notes: true,
         numbers: true,
+        credit: false,
         rawHtml: false,
         highlight: true,
         transition: "",
@@ -571,6 +575,11 @@ export func sectionIn(slide as slides.Slide, total as int, opts as Options, word
     $out = $out + body($slide, $opts);
     if (strings.trim($opts.footer) != "") {
         $out = $out + "<div class=\"cantrip-slide-footer\">" + html.escape($opts.footer) + "</div>";
+    }
+    if ($opts.credit and $slide.number == 1) {
+        $out = $out + "<div class=\"cantrip-slide-credit\">" + html.escape(slides.CREDIT) +
+            ", <a href=\"" + attrValue(slides.CREDIT_URL) + "\">" + html.escape(slides.CREDIT_URL) +
+            "</a></div>";
     }
     if ($opts.numbers) {
         $out = $out + "<div class=\"cantrip-slide-number\">" + convert.toString($slide.number) +
@@ -1174,7 +1183,7 @@ export func script() {
 
     // A slide whose content is taller than its area (a long table, say) is
     // shrunk just enough to fit, by zooming its content; the slide number,
-    // footer and notes keep their size. Never below 60%, so text stays
+    // footer, credit and notes keep their size. Never below 60%, so text stays
     // readable: a slide that still does not fit then overflows as before.
     // The zoom used is kept in data-fit. Runs again once web fonts load,
     // since they change the measurements.
@@ -1182,6 +1191,7 @@ export func script() {
         slides.forEach(function (s) {
             var parts = Array.prototype.filter.call(s.children, function (c) {
                 return !c.classList.contains("cantrip-slide-number") &&
+                    !c.classList.contains("cantrip-slide-credit") &&
                     !c.classList.contains("cantrip-slide-footer") &&
                     !c.classList.contains("cantrip-slide-notes");
             });

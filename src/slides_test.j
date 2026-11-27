@@ -19,6 +19,15 @@ func testConstants() {
     testing.assertEqual(PAGE_BREAK, "<!-- pagebreak -->");
 }
 
+/**
+ * The credit is plain WinAnsi text (the PDF draws it in a standard font) and
+ * names the repository it links to.
+ */
+func testCredit() {
+    testing.assertEqual(CREDIT, "Powered by Jennifer's Cantrip - Markdown into slide decks");
+    testing.assertEqual(CREDIT_URL, "https://github.com/jennifer-language/cantrip");
+}
+
 /** Three or more dashes separate slides; anything else does not. */
 func testIsSeparator() {
     testing.assertTrue(isSeparator("---"));

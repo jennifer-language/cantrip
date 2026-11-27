@@ -1506,6 +1506,19 @@ dd { margin: 0 0 0.5em 1.4em; }
     text-overflow: ellipsis;
 }
 
+/*
+ * The credit sits on the first slide above the slide number, in the muted
+ * colour, so it stays out of the way of the slide and of the counter.
+ */
+.cantrip-slide > div.cantrip-slide-credit {
+    position: absolute;
+    right: 80px;
+    bottom: 72px;
+    font-size: 14px;
+    color: var(--muted);
+}
+.cantrip-slide > div.cantrip-slide-credit a { color: inherit; }
+
 body > #cantrip-progress {
     position: fixed;
     left: 0;

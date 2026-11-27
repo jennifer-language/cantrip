@@ -19,6 +19,15 @@ use convert;
 import "markdown.j" as markdown;
 import "doctree.j" as doctree;
 
+/**
+ * The credit `--credit` puts on the first slide: what made the deck, then
+ * where to find it, as a link.
+ */
+export def const CREDIT as string init "Powered by Jennifer's Cantrip - Markdown into slide decks";
+
+/** The address the credit names and links to. */
+export def const CREDIT_URL as string init "https://github.com/jennifer-language/cantrip";
+
 /** The fence that opens and closes a front-matter block. */
 export def const FENCE as string init "---";
 

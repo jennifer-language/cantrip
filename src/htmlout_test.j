@@ -161,6 +161,32 @@ func testSectionWithoutFurniture() {
     testing.assertFalse(strings.contains($got, "cantrip-slide-footer"));
 }
 
+/**
+ * The credit is off by default; turned on, it is on the first slide only,
+ * before the counter and the notes (the script reads the notes as the last
+ * child), with the address as a link.
+ */
+func testSectionCredit() {
+    def deck as slides.Deck init fixture();
+    testing.assertFalse(strings.contains(
+        section($deck.slides[0], 2, defaults()),
+        "cantrip-slide-credit"));
+    def opts as Options init defaults();
+    $opts.credit = true;
+    def first as string init section($deck.slides[0], 2, $opts);
+    testing.assertContains(
+        $first,
+        '<div class="cantrip-slide-credit">Powered by Jennifer&#39;s Cantrip - ' +
+            'Markdown into slide decks, <a href="https://github.com/jennifer-language/cantrip">' +
+            'https://github.com/jennifer-language/cantrip</a></div><div class="cantrip-slide-number">');
+    testing.assertTrue(strings.indexOf($first, "cantrip-slide-credit") <
+        strings.indexOf($first, "cantrip-slide-notes"));
+    testing.assertFalse(strings.contains(
+        section($deck.slides[1], 2, $opts),
+        "cantrip-slide-credit"));
+    testing.assertContains(script(), '!c.classList.contains("cantrip-slide-credit")');
+}
+
 /** A slide with no notes carries no notes element even when notes are on. */
 func testSectionNoNotes() {
     def slide as slides.Slide init fixture().slides[1];
