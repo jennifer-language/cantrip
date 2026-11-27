@@ -768,11 +768,7 @@ export func handoutFooter(deck as slides.Deck, opts as Options) {
  */
 export func footer(deck as slides.Deck, opts as Options) {
     def out as pdf.PageLabel init pdf.pageLabel();
-    def left as string init strings.trim($opts.footer);
-    if ($left == "") {
-        $left = strings.trim($deck.title);
-    }
-    $out.left = pdf.toWinAnsi($left, "?");
+    $out.left = pdf.toWinAnsi(footerText($deck, $opts), "?");
     if ($opts.numbers) {
         $out.right = "%page% / %pages%";
     }
@@ -1279,31 +1275,175 @@ export func printableMaths(tree as doctree.Node, lay as doctree.PdfOptions) {
  * @throws {Error} kind "limit" when a document exceeds the parser's budget
  */
 export func document(deck as slides.Deck, opts as Options) {
+    return laidOut($deck, $opts).doc;
+}
+
+/**
+ * A rendered document and the characters it had to print as `?`.
+ * @field doc {pdf.Document} the laid-out, scaled, footed document
+ * @field lost {list of string} one warning per character the PDF could not
+ *     show, empty when nothing was lost
+ */
+export def struct Laid {
+    doc as pdf.Document,
+    lost as list of string
+};
+
+/**
+ * `document`, also reporting what the PDF could not show. The PDF's fonts are
+ * the standard ones, which encode only Western European text (WinAnsi), so an
+ * arrow, an emoji or Greek prints as `?`; that is a warning, naming the
+ * character and its pages, rather than a silent `?`. The footer text counts too.
+ * @param deck {slides.Deck} the deck to render
+ * @param opts {Options} how to render it
+ * @return {Laid} the document and its warnings
+ * @throws {Error} kind "theme" when the theme or ratio name is unknown
+ * @throws {Error} kind "highlight" when the deck's `highlight:` is not true or false
+ * @throws {Error} kind "limit" when a document exceeds the parser's budget
+ */
+export func laidOut(deck as slides.Deck, opts as Options) {
+    return laidOutWith($deck, $opts, {"the footer": footerText($deck, $opts)});
+}
+
+/**
+ * `laidOut`, checking the given text the PDF draws outside its layout in
+ * place of the footer (a handout has a footer and a title of its own).
+ * @param deck {slides.Deck} the deck to render
+ * @param opts {Options} how to render it
+ * @param extra {map of string to string} other printed text, by where it is
+ * @return {Laid} the document and its warnings
+ * @throws {Error} kind "theme" when the theme or ratio name is unknown
+ * @throws {Error} kind "highlight" when the deck's `highlight:` is not true or false
+ * @throws {Error} kind "limit" when a document exceeds the parser's budget
+ */
+export func laidOutWith(deck as slides.Deck, opts as Options, extra as map of string to string) {
     def source as string init slides.kbdToCode(slides.toMarkdown($deck, $opts.notes));
     def lay as doctree.PdfOptions init layout($deck, $opts);
     def tree as doctree.Node init printableMaths(markdown.parse($source), $lay);
     def laid as pdf.Document;
+    def missing as list of doctree.MissingGlyph;
     if (pickHighlight($deck, $opts)) {
         def real as doctree.Fill init $lay.codeFill;
         $lay.codeFill = fill(CODE_MARK);
-        $laid = doctree.renderPdfDoc($tree, $lay);
+        def res as doctree.PdfResult init doctree.layoutPdf($tree, $lay);
+        $laid = $res.doc;
+        $missing = $res.missing;
         def blocks as list of Painted init paintPlan(
             $tree,
             theme.printSyntax(pickTheme($deck, $opts)),
             $lay.unencodable);
         $laid = paintCode($laid, Plan{blocks: $blocks}, $lay, $real);
     } else {
-        $laid = doctree.renderPdfDoc($tree, $lay);
+        def res as doctree.PdfResult init doctree.layoutPdf($tree, $lay);
+        $laid = $res.doc;
+        $missing = $res.missing;
     }
-    def doc as pdf.Document init magnify($laid, pickStage($deck, $opts));
     def label as pdf.PageLabel init footer($deck, $opts);
+    return Laid{
+        doc: footed(magnify($laid, pickStage($deck, $opts)), $label, $opts),
+        lost: lostWarnings($missing, $extra, $lay.unencodable)
+    };
+}
+
+/** How many characters the PDF could not show are named one by one; the rest are counted. */
+export def const LOST_NAMED as int init 8;
+
+/**
+ * The warnings for what the PDF could not show: one per distinct character,
+ * with the pages it falls on and the text it first appeared in, at most
+ * `LOST_NAMED` of them and then a count of the rest. Text the PDF draws
+ * outside the layout (a footer, a handout's title and notes) is checked too,
+ * each named by where it is.
+ * @param missing {list of doctree.MissingGlyph} what the layout could not draw
+ * @param extra {map of string to string} other printed text, by where it is
+ *     (such as "the footer"), as written
+ * @param stand {string} what the PDF prints instead
+ * @return {list of string} the warnings, empty when nothing was lost
+ */
+export func lostWarnings(
+    missing as list of doctree.MissingGlyph,
+    extra as map of string to string,
+    stand as string) {
+    def order as list of string init [];
+    def pages as map of string to list of int init {};
+    def where as map of string to string init {};
+    for (def m in $missing) {
+        if (not maps.has($pages, $m.char)) {
+            $order[] = $m.char;
+            $pages[$m.char] = [];
+            $where[$m.char] = "\"" + $m.context + "\"";
+        }
+        if (not lists.contains($pages[$m.char], $m.pageNr)) {
+            $pages[$m.char][] = $m.pageNr;
+        }
+    }
+    for (def place in $extra) {
+        for (def ch in strings.chars($extra[$place])) {
+            if (pdf.toWinAnsi($ch, "") == "" and not maps.has($pages, $ch)) {
+                $order[] = $ch;
+                $pages[$ch] = [];
+                $where[$ch] = $place;
+            }
+        }
+    }
+    def out as list of string init [];
+    for (def ch in $order) {
+        if (len($out) == LOST_NAMED) {
+            $out[] = convert.toString(len($order) - LOST_NAMED) +
+                " more character(s) the PDF cannot show print as " + $stand + " too";
+            return $out;
+        }
+        def at as string init "";
+        if (len($pages[$ch]) > 0) {
+            def nrs as list of string init [];
+            for (def n in $pages[$ch]) {
+                $nrs[] = convert.toString($n);
+            }
+            $at = " on page(s) " + strings.join($nrs, ", ");
+        }
+        $out[] = "the PDF prints \"" + $ch + "\" (" + codepoint($ch) + ") as " + $stand + $at +
+            ", first in " + $where[$ch] + ": its fonts cover Western European text only";
+    }
+    return $out;
+}
+
+# codepoint is a character's U+XXXX name: upper-case hex, at least four digits.
+func codepoint(ch as string) {
+    def digits as string init "0123456789ABCDEF";
+    def n as int init convert.toCodepoint($ch);
+    def hex as string init "";
+    while ($n > 0 or len($hex) < 4) {
+        $hex = $digits[$n % 16..$n % 16 + 1] + $hex;
+        $n = $n // 16;
+    }
+    return "U+" + $hex;
+}
+
+# footed attaches the running footer, with the credit on the first page first.
+func footed(doc as pdf.Document, label as pdf.PageLabel, opts as Options) {
+    def out as pdf.Document init $doc;
     if ($opts.credit) {
-        $doc = credit($doc, $label);
+        $out = credit($out, $label);
     }
     if ($label.left != "" or $label.right != "") {
-        $doc = pdf.setFooter($doc, $label);
+        $out = pdf.setFooter($out, $label);
     }
-    return $doc;
+    return $out;
+}
+
+/**
+ * The text the running footer shows on the left: the `--footer` text, else
+ * the deck's title.
+ * @param deck {slides.Deck} the deck being rendered
+ * @param opts {Options} the caller's options
+ * @return {string} the text as written, before WinAnsi
+ */
+export func footerText(deck as slides.Deck, opts as Options) {
+    def left as string init strings.trim($opts.footer);
+    if ($left == "") {
+        return strings.trim($deck.title);
+    }
+    return $left;
 }
 
 /** The credit's size, in points: a step below the footer's. */

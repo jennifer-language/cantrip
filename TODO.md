@@ -21,6 +21,9 @@ empty page, but any later one opens a new page.
    interpreter change, but the PDF then shows that heading at h2 size and
    bookmarks it one level down.
 
+Option 2 is a judgement call: it fixes the page count but changes how the
+heading looks in the PDF.
+
 Until then the behaviour is documented in `docs/format.md`, "Page breaks".
 
 ## Characters outside Western European print as `?` in the PDF
@@ -45,8 +48,22 @@ does not use that path.
    Cantrip then embeds a free Unicode font such as DejaVu Sans / Sans Mono,
    either shipped with cantrip or chosen by the theme, with a fallback for a
    glyph the font lacks.
-2. Until then: cantrip warns, naming the slide and the character, whenever
-   text in the PDF cannot be encoded, instead of printing `?`. A build then
-   fails the academy's "no warnings" rule on its own, without a separate check.
+2. **Done:** cantrip warns once per character the PDF prints as `?`, naming
+   its pages and where it first appears (`docs/format.md`, "Characters the
+   PDF cannot show"). A build then fails the academy's "no warnings" rule on
+   its own.
 
-Option 2 is small and worth doing first; option 1 is the fix.
+Option 1 is the fix, and needs the interpreter first, so cantrip cannot do it
+alone.
+
+## A presenter window for a second screen
+
+A synced window with the current slide, a preview of the next one, the notes
+and the clock, while the projector shows only the slide. This is the real
+presenter feature (reveal.js and PowerPoint have it); the notes panel beside
+the slide is the stopgap until then.
+
+## Reveal bullets one at a time
+
+Common in other tools, but it needs a syntax decision, and it has to work in
+the PDF too.

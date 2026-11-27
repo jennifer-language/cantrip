@@ -310,6 +310,46 @@ func testCredit() {
     testing.assertEqual(len(credit(pdf.document(), $bare).pages), 0);
 }
 
+/**
+ * Characters the PDF fonts lack are reported, one warning per character with
+ * its pages and first text, the footer included; a clean deck has none.
+ */
+func testLostCharacters() {
+    testing.assertEqual(len(laidOut(fixture(), defaults()).lost), 0);
+    def deck as slides.Deck init slides.parse(
+        "---\ntitle: T \u03A9\n---\n# A \u2192 B\n\n---\n\n## C \u2192 D\n");
+    def got as list of string init laidOut($deck, defaults()).lost;
+    testing.assertEqual(len($got), 2);
+    testing.assertContains($got[0], "\"\u2192\" (U+2192) as ? on page(s) 1, 2, first in");
+    testing.assertContains($got[1], "(U+03A9) as ?, first in the footer");
+    testing.assertEqual(footerText($deck, defaults()), "T \u03A9");
+    def opts as Options init defaults();
+    $opts.footer = "F";
+    testing.assertEqual(footerText($deck, $opts), "F");
+    testing.assertEqual(len(laidOutWith($deck, defaults(), {}).lost), 1);
+}
+
+/** Past `LOST_NAMED` distinct characters, the rest are counted, not named. */
+func testLostWarningsCap() {
+    def missing as list of doctree.MissingGlyph init [];
+    for (def i in 0..LOST_NAMED + 3) {
+        $missing[] = doctree.MissingGlyph{
+            char: convert.fromCodepoint(0x3B1 + $i),
+            codepoint: 0x3B1 + $i,
+            role: "body",
+            pageNr: 1,
+            y: 0,
+            context: "x"
+        };
+    }
+    def got as list of string init lostWarnings($missing, {}, "?");
+    testing.assertEqual(len($got), LOST_NAMED + 1);
+    testing.assertContains(
+        $got[LOST_NAMED],
+        "3 more character(s) the PDF cannot show print as ? too");
+    testing.assertContains(lostWarnings([], {"the notes": "\U0001F600"}, "?")[0], "(U+1F600)");
+}
+
 /** The handout footer carries the --footer text and always numbers its pages. */
 func testHandoutFooterNumbersPages() {
     def opts as Options init defaults();
