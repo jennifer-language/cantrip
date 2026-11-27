@@ -3,8 +3,8 @@
 ## What you need first
 
 The [Jennifer interpreter](https://jennifer-lang.dev/), **0.28.0 or newer**.
-0.26.0 lacks `encoding.encode` / `encoding.decode` and `strings.replicate`,
-which `cantrip` uses.
+0.27.0 lacks `toml.asLocal`, which `cantrip` uses to read a plugin's local
+TOML dates.
 `deck.toml` declares that floor, so `jvc check` will tell you if the
 interpreter you have is too old, and every source file carries the same floor
 as a `pragma-jennifer-version` header, so an old interpreter stops with a clear
