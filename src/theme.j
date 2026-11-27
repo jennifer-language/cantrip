@@ -1507,16 +1507,19 @@ dd { margin: 0 0 0.5em 1.4em; }
 }
 
 /*
- * The credit sits on the first slide above the slide number, in the muted
- * colour, so it stays out of the way of the slide and of the counter.
+ * The credit sits on the first slide bottom left, on the line of the number,
+ * in the muted colour, so it stays out of the way of the slide and leaves the
+ * counter alone. Footer text takes that place, so with a footer the credit
+ * moves up a line, above it (the footer comes first in the slide).
  */
 .cantrip-slide > div.cantrip-slide-credit {
     position: absolute;
-    right: 80px;
-    bottom: 72px;
+    left: 80px;
+    bottom: 44px;
     font-size: 14px;
     color: var(--muted);
 }
+.cantrip-slide > div.cantrip-slide-footer ~ div.cantrip-slide-credit { bottom: 72px; }
 .cantrip-slide > div.cantrip-slide-credit a { color: inherit; }
 
 body > #cantrip-progress {
@@ -1571,6 +1574,7 @@ body > #cantrip-notes[data-at="right"] { inset: 0 0 0 auto; border-left: 2px sol
 body > #cantrip-notes > h2 {
     font-size: 15px;
     margin: 0 0 8px;
+    padding-right: 64px;
     color: var(--accent);
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -1582,6 +1586,25 @@ body > #cantrip-notes code, body > #cantrip-notes kbd {
     border-color: #3a3f4b;
 }
 body > #cantrip-notes a { color: #8ab4ff; }
+/* The talk clock, top right in the notes panel; a click restarts it. */
+body > #cantrip-notes > #cantrip-clock {
+    position: absolute;
+    top: 16px;
+    right: 24px;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+    color: #9aa0ad;
+    cursor: pointer;
+}
+
+/* The black screen (b or .): over everything but the help. */
+body > #cantrip-black {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 18;
+}
+body > #cantrip-black[hidden] { display: none; }
 
 body > #cantrip-help {
     position: fixed;
@@ -1697,6 +1720,7 @@ body > #cantrip-overview > .cantrip-thumb > .cantrip-thumb-t {
     body > #cantrip-progress,
     body > #cantrip-notes,
     body > #cantrip-help,
+    body > #cantrip-black,
     body > #cantrip-touchbar,
     body > #cantrip-overview {
         display: none !important;

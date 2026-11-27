@@ -10,7 +10,7 @@
  */
 use testing;
 
-# every field of a table, in order, so a test can look at all twenty-one
+# every field of a table, in order, so a test can look at all twenty-three
 func all(w as Words) {
     return [
         $w.slide,
@@ -33,7 +33,9 @@ func all(w as Words) {
         $w.fullscreenButton,
         $w.noNotes,
         $w.untitled,
-        $w.notesMoveKey
+        $w.notesMoveKey,
+        $w.clockKey,
+        $w.blackKey
     ];
 }
 
@@ -42,7 +44,7 @@ func all(w as Words) {
 func testEveryLanguageHasEveryWord() {
     for (def lang in languages()) {
         def got as list of string init all(words($lang));
-        testing.assertEqual(len($got), 21);
+        testing.assertEqual(len($got), 23);
         for (def w in $got) {
             testing.assertTrue(strings.trim($w) != "");
             testing.assertFalse(strings.contains($w, "<") or strings.contains($w, ">") or

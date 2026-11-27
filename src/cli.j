@@ -35,7 +35,7 @@ import "./highlight.j" as highlight;
 import "./plugin.j" as plugin;
 
 /** The application version, and the version `--version` reports. */
-export def const VERSION as string init "0.9.0";
+export def const VERSION as string init "0.10.0";
 
 /** The command name, as installed on PATH. */
 export def const PROGRAM as string init "cantrip";
@@ -53,10 +53,12 @@ export def const MISUSE as int init 2;
  * What writing one output produced.
  * @field bytes {int} how many bytes were written
  * @field pages {int} how many pages the output holds; 0 for the HTML
+ * @field lost {list of string} a warning per character a PDF prints as `?`
  */
 export def struct Written {
     bytes as int,
-    pages as int
+    pages as int,
+    lost as list of string
 };
 
 /** Image URL schemes that cannot be loaded from the filesystem. */
@@ -136,6 +138,13 @@ export func parser() {
     $p = args.flag($p, "notes-panel", "", "", "HTML: speaker notes open or closed at start");
     $p = args.flag($p, "start-slide", "", "", "HTML: the slide to open on, from 1");
     $p = args.flag($p, "overview", "", "", "HTML: overview open or closed at start");
+    $p = args.flag(
+        $p,
+        "notes-place",
+        "",
+        "",
+        "HTML: where the notes panel starts: bottom, top, left or right");
+    $p = args.flag($p, "notes-title", "", "", "HTML: the notes panel's heading");
     $p = args.boolFlag($p, "no-numbers", "", "omit slide numbers");
     $p = args.boolFlag($p, "credit", "", "name cantrip, with a link, on the first slide");
     $p = args.boolFlag($p, "raw-html", "", "pass raw HTML in the Markdown through unescaped");
@@ -837,15 +846,19 @@ export func htmlOptions(r as args.Result) {
     $out.startNotes = args.asString($r, "notes-panel");
     $out.startSlide = args.asString($r, "start-slide");
     $out.startOverview = args.asString($r, "overview");
+    $out.notesPlace = args.asString($r, "notes-place");
+    $out.notesTitle = args.asString($r, "notes-title");
     return $out;
 }
 
 /**
- * Check the slideshow's start flags, `--notes-panel`, `--overview` and
- * `--start-slide`. Whether the slide exists is checked against the deck later.
+ * Check the slideshow's start flags, `--notes-panel`, `--overview`,
+ * `--notes-place` and `--start-slide`. Whether the slide exists is checked
+ * against the deck later.
  * @param r {args.Result} the parsed command line
- * @throws {Error} kind "cli" on a value other than open / closed, or a slide
- *     number that is not a whole number from 1
+ * @throws {Error} kind "cli" on a value other than open / closed, a place
+ *     other than bottom / top / left / right, or a slide number that is not a
+ *     whole number from 1
  */
 export func startFlags(r as args.Result) {
     for (def name in ["notes-panel", "overview"]) {
@@ -859,6 +872,18 @@ export func startFlags(r as args.Result) {
                 col: 0
             };
         }
+    }
+    def place as string init strings.lower(strings.trim(args.asString($r, "notes-place")));
+    if ($place != "" and not lists.contains(htmlout.NOTES_PLACES, $place)) {
+        throw Error{
+            kind: "cli",
+            message: "--notes-place wants " + strings.join(htmlout.NOTES_PLACES, ", ") +
+                ", got \"" +
+                $place + "\"",
+            file: "",
+            line: 0,
+            col: 0
+        };
     }
     def slide as string init strings.trim(args.asString($r, "start-slide"));
     if ($slide != "" and not regex.matches('^[1-9][0-9]{0,5}$', $slide)) {
@@ -986,7 +1011,7 @@ export func writeHtmlIn(
     baseDir as string) {
     def out as string init renderHtmlIn($deck, $r, $root, $baseDir);
     fs.writeString($target, $out);
-    return Written{bytes: len(encoding.encode("utf-8", $out)), pages: 0};
+    return Written{bytes: len(encoding.encode("utf-8", $out)), pages: 0, lost: []};
 }
 
 /**
@@ -1093,10 +1118,10 @@ export func writePdfWith(
     root as string) {
     def opts as pdfout.Options init pdfOptions($r);
     $opts.images = loadImagesWith($deck, $baseDir, args.asBool($r, "verbose"), $root);
-    def doc as pdf.Document init pdfout.document($deck, $opts);
-    def out as bytes init pdf.render($doc);
+    def laid as pdfout.Laid init pdfout.laidOut($deck, $opts);
+    def out as bytes init pdf.render($laid.doc);
     fs.writeBytes($target, $out);
-    return Written{bytes: len($out), pages: pdf.getTotalPages($doc)};
+    return Written{bytes: len($out), pages: pdf.getTotalPages($laid.doc), lost: $laid.lost};
 }
 
 /**
@@ -1140,7 +1165,16 @@ export func writeHandoutWith(
         $opts.notes = false;
         $beside = slideNotes($deck);
     }
-    def slidesDoc as pdf.Document init pdfout.document($deck, $opts);
+    # The handout draws its own title, footer and notes column, not the slides' footer.
+    def extra as map of string to string init {
+        "the handout's title": pdfout.handoutTitle($deck),
+        "the footer": $opts.footer
+    };
+    for (def i in 0..len($beside)) {
+        $extra["the notes beside slide " + convert.toString($i + 1)] = $beside[$i];
+    }
+    def laid as pdfout.Laid init pdfout.laidOutWith($deck, $opts, $extra);
+    def slidesDoc as pdf.Document init $laid.doc;
     def doc as pdf.Document init pdfout.handoutWith(
         $slidesDoc,
         pdfout.pickStage($deck, $opts),
@@ -1149,7 +1183,7 @@ export func writeHandoutWith(
         $beside);
     def out as bytes init pdf.render($doc);
     fs.writeBytes($target, $out);
-    return Written{bytes: len($out), pages: pdf.getTotalPages($slidesDoc)};
+    return Written{bytes: len($out), pages: pdf.getTotalPages($slidesDoc), lost: $laid.lost};
 }
 
 /**
@@ -1208,6 +1242,16 @@ export func warnOverflow(deck as slides.Deck, pages as int) {
     def message as string init overflowMessage(len($deck.slides), $pages);
     if ($message != "") {
         io.eprintf("%s: warning: %s\n", PROGRAM, $message);
+    }
+}
+
+/**
+ * Warn about every character the PDF printed as `?`, one line each.
+ * @param lost {list of string} the warnings from the render
+ */
+export func warnLost(lost as list of string) {
+    for (def message in $lost) {
+        io.eprintf("%s: warning: %s\n", PROGRAM, printable($message));
     }
 }
 
@@ -1501,6 +1545,7 @@ export func dispatch(verb as string, files as list of string, r as args.Result) 
         def w as Written init writeHandoutWith($deck, $r, $target, $baseDir, $pre.root);
         announceFor($target, $w.bytes, len($deck.slides), $r);
         warnOverflow($deck, $w.pages);
+        warnLost($w.lost);
         return OK;
     }
     if ($verb == "pdf") {
@@ -1509,6 +1554,7 @@ export func dispatch(verb as string, files as list of string, r as args.Result) 
         def w as Written init writePdfWith($deck, $r, $target, $baseDir, $pre.root);
         announceFor($target, $w.bytes, len($deck.slides), $r);
         warnOverflow($deck, $w.pages);
+        warnLost($w.lost);
         return OK;
     }
     # build: both, sharing one parse and one base stem. The PDF's own flags are
@@ -1527,6 +1573,7 @@ export func dispatch(verb as string, files as list of string, r as args.Result) 
     def printed as Written init writePdfWith($deck, $r, $pdfTarget, $baseDir, $pre.root);
     announceFor($pdfTarget, $printed.bytes, len($deck.slides), $r);
     warnOverflow($deck, $printed.pages);
+    warnLost($printed.lost);
     return OK;
 }
 

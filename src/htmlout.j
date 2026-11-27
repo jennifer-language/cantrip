@@ -43,8 +43,8 @@ export def const DEFAULT_TRANSITION as string init "fade";
  * @field footer {string} text shown bottom-left on every slide
  * @field notes {bool} embed speaker notes for the presenter panel
  * @field numbers {bool} show the slide counter bottom-right
- * @field credit {bool} name cantrip, with a link, in the first slide's
- *     bottom-right corner, above the counter
+ * @field credit {bool} name cantrip, with a link, bottom left on the first
+ *     slide, on the counter's line (above the footer text when there is one)
  * @field rawHtml {bool} pass raw HTML in the Markdown through unescaped
  * @field highlight {bool} colour code blocks in a language `highlight` knows;
  *     the deck's `highlight: false` turns it off too
@@ -52,6 +52,11 @@ export def const DEFAULT_TRANSITION as string init "fade";
  * @field startNotes {string} notes panel at start, "open" or "closed"; "" for the deck's own
  * @field startSlide {string} the slide to open on, 1-based; "" for the deck's own
  * @field startOverview {string} overview at start, "open" or "closed"; "" for the deck's own
+ * @field notesPlace {string} where the notes panel starts: "bottom", "top", "left" or
+ *     "right"; "" for the deck's own `notes-place:`, else bottom
+ * @field notesTitle {string} the notes panel's heading, also its label and its
+ *     touch-bar button's; "" for the deck's own `notes-title:`, else the
+ *     language's "Speaker notes"
  * @field favicon {string} the page's icon, as the `href` of its
  *     `<link rel="icon">`: a `data:` URL the caller built from the deck's
  *     `favicon:` file, or an http(s) URL; "" for none
@@ -74,23 +79,30 @@ export def struct Options {
     startNotes as string,
     startSlide as string,
     startOverview as string,
+    notesPlace as string,
+    notesTitle as string,
     favicon as string,
     embedded as map of string to string
 };
 
 /**
  * How the slideshow opens: resolved from the options, the front matter and
- * the defaults (closed, slide 1, closed). The page's URL can still override
- * each when it is viewed.
+ * the defaults (closed, slide 1, closed, bottom). The page's URL can still
+ * override each when it is viewed.
  * @field notes {bool} the speaker-notes panel starts open
  * @field slide {int} the slide to open on, 1-based
  * @field overview {bool} the overview starts open
+ * @field notesPlace {string} where the notes panel starts: bottom, top, left or right
  */
 export def struct Start {
     notes as bool,
     slide as int,
-    overview as bool
+    overview as bool,
+    notesPlace as string
 };
+
+/** Where the notes panel can sit, in the order shift+s moves it; the first is the default. */
+export def const NOTES_PLACES as list of string init ["bottom", "top", "left", "right"];
 
 /**
  * The default options: safe, numbered, highlighted, with notes embedded.
@@ -111,6 +123,8 @@ export func defaults() {
         startNotes: "",
         startSlide: "",
         startOverview: "",
+        notesPlace: "",
+        notesTitle: "",
         favicon: "",
         embedded: {}
     };
@@ -159,9 +173,43 @@ export func openClosed(name as string, value as string) {
 }
 
 /**
+ * Read a `notes-place` value, case-insensitively.
+ * @param value {string} the value, "" for the default
+ * @return {string} bottom, top, left or right; bottom for ""
+ * @throws {Error} kind "start" for any other value
+ */
+export func notesPlace(value as string) {
+    def v as string init strings.lower(strings.trim($value));
+    if ($v == "") {
+        return NOTES_PLACES[0];
+    }
+    if (lists.contains(NOTES_PLACES, $v)) {
+        return $v;
+    }
+    throw startError("notes-place wants " + strings.join(NOTES_PLACES, ", ") + ", got \"" + $value +
+        "\"");
+}
+
+/**
+ * The notes panel's heading: the option, else the deck's `notes-title:`, else
+ * the language's own words.
+ * @param deck {slides.Deck} the deck being rendered
+ * @param opts {Options} the caller's options
+ * @param words {locale.Words} the slideshow's words
+ * @return {string} the heading, plain text
+ */
+export func notesTitle(deck as slides.Deck, opts as Options, words as locale.Words) {
+    def title as string init strings.trim(startValue($deck, $opts.notesTitle, "notes-title"));
+    if ($title == "") {
+        return $words.notes;
+    }
+    return $title;
+}
+
+/**
  * Resolve how the slideshow opens. An option (from the command line) wins
- * over the deck's `notes:`, `slide:` and `overview:` front-matter keys, which
- * win over the defaults.
+ * over the deck's `notes:`, `notes-place:`, `slide:` and `overview:`
+ * front-matter keys, which win over the defaults.
  * @param deck {slides.Deck} the deck being rendered
  * @param opts {Options} the caller's options
  * @return {Start} the start state written into the page
@@ -169,8 +217,9 @@ export func openClosed(name as string, value as string) {
  *     notes in a page built without them
  */
 export func pickStart(deck as slides.Deck, opts as Options) {
-    def out as Start init Start{notes: false, slide: 1, overview: false};
+    def out as Start init Start{notes: false, slide: 1, overview: false, notesPlace: "bottom"};
     $out.notes = openClosed("notes", startValue($deck, $opts.startNotes, "notes"));
+    $out.notesPlace = notesPlace(startValue($deck, $opts.notesPlace, "notes-place"));
     $out.overview = openClosed("overview", startValue($deck, $opts.startOverview, "overview"));
     def slide as string init startValue($deck, $opts.startSlide, "slide");
     if ($slide != "") {
@@ -718,6 +767,8 @@ export func helpPanelIn(words as locale.Words) {
         helpRow('<kbd>o</kbd>', $words.overviewKey),
         helpRow('<kbd>s</kbd>', $words.notesKey),
         helpRow('<kbd>shift</kbd>+<kbd>s</kbd>', $words.notesMoveKey),
+        helpRow('<kbd>t</kbd>', $words.clockKey),
+        helpRow('<kbd>b</kbd> <kbd>.</kbd>', $words.blackKey),
         helpRow('<kbd>m</kbd>', $words.modeKey),
         helpRow('<kbd>f</kbd>', $words.fullscreenKey),
         helpRow('<kbd>?</kbd>', $words.helpKey),
@@ -801,6 +852,7 @@ export func render(deck as slides.Deck, opts as Options) {
     def options as Options init $opts;
     $options.highlight = pickHighlight($deck, $opts);
     def words as locale.Words init locale.words(language($deck));
+    $words.notes = notesTitle($deck, $opts, $words);
     def parts as list of string init [];
     $parts[] = "<!doctype html>";
     $parts[] = "<html lang=\"" + attrValue(language($deck)) + "\" data-mode=\"" + $mode + "\">";
@@ -815,11 +867,14 @@ export func render(deck as slides.Deck, opts as Options) {
     $parts[] = "</main>";
     $parts[] = overview($deck);
     if ($opts.notes) {
-        $parts[] = '<aside id="cantrip-notes" hidden data-at="bottom" aria-label="' +
+        $parts[] = '<aside id="cantrip-notes" hidden data-at="' + $start.notesPlace +
+            '" aria-label="' +
             attrValue($words.notes) +
             '" data-empty="' + attrValue($words.noNotes) + '"><h2>' + html.escape($words.notes) +
-            '</h2><div id="cantrip-notes-body"></div></aside>';
+            '</h2><span id="cantrip-clock" role="timer" title="' + attrValue($words.clockKey) +
+            '">0:00</span><div id="cantrip-notes-body"></div></aside>';
     }
+    $parts[] = '<div id="cantrip-black" hidden></div>';
     $parts[] = touchBarIn($opts.notes, $words);
     $parts[] = helpPanelIn($words);
     $parts[] = "<script>" + script() + "</script>";
@@ -861,6 +916,8 @@ export func script() {
     var overview = part("overview");
     var help = part("help");
     var bar = part("touchbar");
+    var black = part("black");
+    var clock = notes ? notes.querySelector(":scope > #cantrip-clock") : null;
     var stageW = parseInt(deck.dataset.w, 10) || 1280;
     var stageH = parseInt(deck.dataset.h, 10) || 720;
     var at = 0;
@@ -881,6 +938,16 @@ export func script() {
     var roomy = window.matchMedia("(min-width: 800px) and (min-height: 560px)").matches;
     var startNotes = asked("notes", deck.dataset.notes === "open" && roomy);
     var startOverview = asked("overview", deck.dataset.overview === "open");
+    // ?notes-place=bottom|top|left|right moves the panel from where the page
+    // was built to start; any other value is ignored, like the others.
+    var askedPlace = query.get("notes-place");
+    // What the viewer changed in this tab (the notes shown or hidden, where
+    // they sit, the mode, the clock) survives a reload, which `cantrip serve`
+    // does on every save. Kept per page in sessionStorage and written only
+    // when the viewer acts; without storage the page simply starts as built.
+    var stateKey = "cantrip:" + location.pathname;
+    var kept = {};
+    try { kept = JSON.parse(window.sessionStorage.getItem(stateKey) || "{}") || {}; } catch (err) { kept = {}; }
     // The mode the page was built with, unless ?mode=light|dark|auto asks for
     // another; m switches it. Both palettes are in the stylesheet, and "auto"
     // follows the system setting until m picks one.
@@ -895,7 +962,9 @@ export func script() {
     }
     function toggleMode() {
         root.dataset.mode = shownMode() === "dark" ? "light" : "dark";
+        keep();
     }
+    if (kept.mode === "light" || kept.mode === "dark") { root.dataset.mode = kept.mode; }
     var startSlide = (parseInt(deck.dataset.slide, 10) || 1) - 1;
 
     function clamp(n) { return Math.max(0, Math.min(slides.length - 1, n)); }
@@ -945,6 +1014,37 @@ export func script() {
         slides.forEach(function (s) { s.style.transform = "scale(" + k + ")"; });
     }
 
+    // The talk clock in the notes panel: time since the first slide change,
+    // or since t (or a click on it) restarted it.
+    var clockStart = typeof kept.clock === "number" ? kept.clock : null;
+    function keep() {
+        try {
+            window.sessionStorage.setItem(stateKey, JSON.stringify({
+                notes: notes ? !notes.hidden : false,
+                at: notes ? notes.dataset.at : "",
+                mode: root.dataset.mode,
+                clock: clockStart
+            }));
+        } catch (err) { /* no storage: nothing is kept */ }
+    }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+    function tick() {
+        if (!clock) { return; }
+        var s = clockStart === null ? 0 : Math.max(0, Math.floor((Date.now() - clockStart) / 1000));
+        var h = Math.floor(s / 3600);
+        var m = Math.floor(s / 60) % 60;
+        clock.textContent = (h > 0 ? h + ":" + two(m) : String(m)) + ":" + two(s % 60);
+    }
+    function restartClock() {
+        clockStart = Date.now();
+        keep();
+        tick();
+    }
+
+    // b or . (the blank key of a presenter remote) blacks the screen out, for a
+    // question or a demo; the same key, Esc or a click brings it back.
+    function toggleBlack() { black.hidden = !black.hidden; }
+
     function setNotes(open) {
         if (!notes) { return; }
         notes.hidden = !open;
@@ -959,6 +1059,7 @@ export func script() {
         var i = places.indexOf(notes.dataset.at);
         notes.dataset.at = places[(i + 1) % places.length];
         setNotes(true);
+        keep();
     }
 
     function showNotes() {
@@ -966,8 +1067,11 @@ export func script() {
         notesBody.innerHTML = notesText(at);
     }
 
+    var started = false;
     function show(n, push) {
+        var was = at;
         at = clamp(n);
+        if (started && clockStart === null && at !== was) { restartClock(); }
         slides.forEach(function (s, i) {
             s.classList.toggle("cantrip-past", i < at);
             s.classList.toggle("cantrip-current", i === at);
@@ -1031,6 +1135,7 @@ export func script() {
     // Esc, in a window or in fullscreen: close an open overlay, else end the
     // presentation (leave fullscreen and go back).
     function escape() {
+        if (!black.hidden) { black.hidden = true; return; }
         if (!overview.hidden || !help.hidden) { close(); return; }
         if (document.fullscreenElement) { exitFullscreen(); }
         leave();
@@ -1069,9 +1174,11 @@ export func script() {
         else if (k === "o") { toggle(overview); }
         else if ((k === "s" || k === "S") && notes) {
             // By shift, not by case, so caps lock does not turn s into a move.
-            if (e.shiftKey) { moveNotes(); } else { setNotes(notes.hidden); }
+            if (e.shiftKey) { moveNotes(); } else { setNotes(notes.hidden); keep(); }
         }
         else if (k === "m") { toggleMode(); }
+        else if (k === "t") { restartClock(); }
+        else if (k === "b" || k === ".") { toggleBlack(); }
         else if (k === "f") { toggleFullscreen(); }
         else if (k === "?") { toggle(help); }
         else if (k === "Escape") { escape(); }
@@ -1175,7 +1282,7 @@ export func script() {
             var act = b.dataset.act;
             showBar(true);
             if (act === "overview") { toggle(overview); }
-            else if (act === "notes" && notes) { close(); setNotes(notes.hidden); }
+            else if (act === "notes" && notes) { close(); setNotes(notes.hidden); keep(); }
             else if (act === "mode") { toggleMode(); }
             else if (act === "fullscreen") { toggleFullscreen(); }
         });
@@ -1210,8 +1317,18 @@ export func script() {
     if (document.fonts && document.fonts.ready) { document.fonts.ready.then(shrinkToFit); }
     window.addEventListener("resize", function () { sizeNotes(); fit(); });
     window.addEventListener("hashchange", function () { show(fromHash(), false); });
+    if (notes && places.indexOf(askedPlace) >= 0) { notes.dataset.at = askedPlace; }
+    if (notes && places.indexOf(kept.at) >= 0) { notes.dataset.at = kept.at; }
+    if (typeof kept.notes === "boolean") { startNotes = kept.notes; }
     setNotes(startNotes && !!notes);
     show(fromHash(), false);
+    started = true;
+    black.addEventListener("click", toggleBlack);
+    if (clock) {
+        clock.addEventListener("click", restartClock);
+        tick();
+        window.setInterval(tick, 1000);
+    }
     if (startOverview) { overview.hidden = false; }
     showBar(true);
     // Transitions start after the first frame, so the deck opens on its slide.

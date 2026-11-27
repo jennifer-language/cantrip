@@ -75,6 +75,8 @@ swallow the deck.
 | `transition` | which [slide transition](themes.md#transitions) the HTML uses | `fade` |
 | `lang` | the HTML `lang` attribute, and the language of the slideshow's own words (the help, the touch bar, the notes panel): `de`, `es`, `fr`, `it`, `ja`, `nl`, `pl`, `pt`, `ru`, `zh`, else English; only the language counts, so `pt-BR` is Portuguese | `en` |
 | `notes` | whether the HTML's speaker-notes panel is `open` or `closed` when the page opens | `closed` |
+| `notes-place` | where the HTML's notes panel starts: `bottom`, `top`, `left` or `right` of the slide | `bottom` |
+| `notes-title` | the notes panel's heading (also its label and its touch-bar button's) | the `lang`'s "Speaker notes" |
 | `slide` | the slide the HTML opens on, from 1 | `1` |
 | `overview` | whether the HTML opens in the slide overview, `open` or `closed` | `closed` |
 | `favicon` | the slideshow's icon: a `.png`, `.svg`, `.ico`, `.gif` or `.jpg` beside the deck, carried inside the page, or an `https://` URL linked as written; a file that is missing or outside the deck's directory stops the build | none |
@@ -93,24 +95,29 @@ overrides the built-in default.
 
 ### How the slideshow opens
 
-`notes`, `slide` and `overview` set the state the HTML opens in. Three
-sources set them, and a later one wins:
+`notes`, `notes-place`, `slide` and `overview` set the state the HTML opens
+in. Three sources set them, and a later one wins:
 
-1. the front matter: `notes: open`, `slide: 3`, `overview: open`;
-2. the command line: `--notes-panel open|closed`, `--start-slide N`,
+1. the front matter: `notes: open`, `notes-place: right`, `slide: 3`,
+   `overview: open`;
+2. the command line: `--notes-panel open|closed`,
+   `--notes-place bottom|top|left|right`, `--start-slide N`,
    `--overview open|closed` on `build` or `html`;
 3. the page's URL when it is viewed: `?notes=1` or `?notes=0`,
-   `?overview=1` or `?overview=0`, and the slide fragment `#3`.
+   `?notes-place=right` (or another place), `?overview=1` or `?overview=0`,
+   and the slide fragment `#3`.
 
 Values are checked strictly where the author sets them: anything but `open` or
-`closed`, a slide number that is not a whole number from 1, or a slide past the
+`closed`, a place other than the four, a slide number that is not a whole number from 1, or a slide past the
 end of the deck fails the build (a bad flag value is exit code `2`, a bad
 front-matter value `1`). `notes: open` in a page built with `--no-notes` fails
 too, with "notes: open needs the notes". In the URL, which is the viewer's
 input, an unknown value is ignored and the built-in start applies.
 
-The notes panel opens below the slide; <kbd>Shift</kbd>+<kbd>s</kbd> moves it
-above the slide, then to the left, then to the right, then below again.
+The notes panel opens below the slide unless `notes-place` says otherwise;
+<kbd>Shift</kbd>+<kbd>s</kbd> moves it on from there, in the order below,
+above, left, right, and round again. Its heading is the deck language's
+"Speaker notes" unless `notes-title:` or `--notes-title` names another.
 Below or above, it is as tall as the longest notes in the deck, at most 30% of
 the window (longer notes scroll), and keeps that height from slide to slide;
 beside the slide it is the full height and about a quarter of the width.
@@ -352,6 +359,21 @@ That is a prompt to split the slide, not an error - the PDF is still correct and
 complete. The count comes from the PDF that was written, so a slide pushed over
 by a tall picture is caught too. Warnings and errors go to stderr, so they still
 show when you redirect the `wrote ...` lines.
+
+## Characters the PDF cannot show
+
+The PDF uses the standard PDF fonts, which cover Western European text only
+(the Windows-1252 set). Anything else, such as an arrow, an emoji, Greek or
+Cyrillic, prints as `?` in the PDF and the handout, while the HTML shows it.
+`cantrip` warns once per character, naming its pages and where it first
+appears:
+
+```text
+cantrip: warning: the PDF prints "→" (U+2192) as ? on page(s) 3, 7, first in "→": its fonts cover Western European text only
+```
+
+The footer text, a handout's title and the notes printed beside its slides are
+checked too. After eight characters the rest are counted rather than named.
 
 A level-1 heading (`#`) below other content on a slide also starts a new PDF
 page, because the PDF layout opens a page for every top-level heading. Keep a

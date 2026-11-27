@@ -43,6 +43,9 @@ use lists;
  * @field noNotes {string} what the notes panel shows for a slide without notes
  * @field untitled {string} the page title of a deck with no title at all
  * @field notesMoveKey {string} help: the key that moves the speaker notes
+ * @field clockKey {string} help: the key that restarts the clock in the notes panel,
+ *     and the clock's tooltip
+ * @field blackKey {string} help: the keys that black the screen out
  */
 export def struct Words {
     slide as string,
@@ -65,7 +68,9 @@ export def struct Words {
     fullscreenButton as string,
     noNotes as string,
     untitled as string,
-    notesMoveKey as string
+    notesMoveKey as string,
+    clockKey as string,
+    blackKey as string
 };
 
 /**
@@ -111,7 +116,9 @@ func one(w as list of string) {
         fullscreenButton: $w[17],
         noNotes: $w[18],
         untitled: $w[19],
-        notesMoveKey: $w[20]
+        notesMoveKey: $w[20],
+        clockKey: $w[21],
+        blackKey: $w[22]
     };
 }
 
@@ -144,7 +151,9 @@ export func words(tag as string) {
                 "Vollbild",
                 "Keine Notizen zu dieser Folie.",
                 "Folien",
-                "Sprechernotizen verschieben"
+                "Sprechernotizen verschieben",
+                "Vortragsuhr neu starten",
+                "schwarzer Bildschirm"
             ]);
         }
         when "es" {
@@ -169,7 +178,9 @@ export func words(tag as string) {
                 "Pantalla completa",
                 "No hay notas para esta diapositiva.",
                 "Diapositivas",
-                "mover las notas del orador"
+                "mover las notas del orador",
+                "reiniciar el reloj de la presentación",
+                "pantalla en negro"
             ]);
         }
         when "fr" {
@@ -194,7 +205,9 @@ export func words(tag as string) {
                 "Plein écran",
                 "Pas de notes pour cette diapositive.",
                 "Diapositives",
-                "déplacer les notes de l'orateur"
+                "déplacer les notes de l'orateur",
+                "relancer le chronomètre de l'exposé",
+                "écran noir"
             ]);
         }
         when "it" {
@@ -219,7 +232,9 @@ export func words(tag as string) {
                 "Schermo intero",
                 "Nessuna nota per questa diapositiva.",
                 "Diapositive",
-                "spostare le note del relatore"
+                "spostare le note del relatore",
+                "riavviare il cronometro della presentazione",
+                "schermo nero"
             ]);
         }
         when "ja" {
@@ -244,7 +259,9 @@ export func words(tag as string) {
                 "全画面",
                 "このスライドにはノートがありません。",
                 "スライド",
-                "発表者ノートを移動"
+                "発表者ノートを移動",
+                "経過時間をリセット",
+                "画面を黒くする"
             ]);
         }
         when "nl" {
@@ -269,7 +286,9 @@ export func words(tag as string) {
                 "Volledig scherm",
                 "Geen notities bij deze dia.",
                 "Dia's",
-                "sprekersnotities verplaatsen"
+                "sprekersnotities verplaatsen",
+                "presentatieklok opnieuw starten",
+                "zwart scherm"
             ]);
         }
         when "pl" {
@@ -294,7 +313,9 @@ export func words(tag as string) {
                 "Pełny ekran",
                 "Brak notatek do tego slajdu.",
                 "Slajdy",
-                "przesuń notatki prelegenta"
+                "przesuń notatki prelegenta",
+                "uruchom ponownie zegar prezentacji",
+                "czarny ekran"
             ]);
         }
         when "pt" {
@@ -319,7 +340,9 @@ export func words(tag as string) {
                 "Tela cheia",
                 "Sem notas para este slide.",
                 "Slides",
-                "mover as notas do apresentador"
+                "mover as notas do apresentador",
+                "reiniciar o relógio da apresentação",
+                "tela preta"
             ]);
         }
         when "ru" {
@@ -344,7 +367,9 @@ export func words(tag as string) {
                 "Полный экран",
                 "Нет заметок к этому слайду.",
                 "Слайды",
-                "переместить заметки докладчика"
+                "переместить заметки докладчика",
+                "перезапустить таймер доклада",
+                "чёрный экран"
             ]);
         }
         when "zh" {
@@ -369,7 +394,9 @@ export func words(tag as string) {
                 "全屏",
                 "此幻灯片没有备注。",
                 "幻灯片",
-                "移动演讲者备注"
+                "移动演讲者备注",
+                "重新开始演讲计时",
+                "黑屏"
             ]);
         }
         else {
@@ -394,7 +421,9 @@ export func words(tag as string) {
                 "Fullscreen",
                 "No notes for this slide.",
                 "Slides",
-                "move the speaker notes"
+                "move the speaker notes",
+                "restart the talk clock",
+                "black screen"
             ]);
         }
     }

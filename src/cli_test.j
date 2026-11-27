@@ -392,6 +392,10 @@ func testHtmlOptions() {
     testing.assertEqual($got.footer, "F");
     testing.assertEqual($got.transition, "zoom");
     testing.assertEqual($plain.transition, "");
+    def placed as htmlout.Options init htmlOptions(
+        parsed(["html", "a.md", "--notes-place", "right", "--notes-title", "Script"]));
+    testing.assertEqual($placed.notesPlace, "right");
+    testing.assertEqual($placed.notesTitle, "Script");
 }
 
 /** The PDF options follow the flags, and notes are opt-in. */
@@ -550,6 +554,25 @@ func testWarnOverflow() {
     def deck as slides.Deck init readDeck([writeDeck($tmp, sample(), "deck.md")]);
     warnOverflow($deck, 2);
     warnOverflow($deck, 5);
+}
+
+/**
+ * A PDF write reports the characters it printed as `?`, and the warning is
+ * advisory too; a clean deck reports none, and the HTML never does.
+ */
+func testWriteReportsLostCharacters() {
+    def tmp as string init fs.makeTempDir();
+    defer fs.removeAll($tmp);
+    def deck as slides.Deck init readDeck([writeDeck($tmp, "# A \u2192 B\n", "arrow.md")]);
+    def r as args.Result init parsed(["pdf", "arrow.md"]);
+    def w as Written init writePdf($deck, $r, path.join($tmp, "arrow.pdf"), $tmp);
+    testing.assertEqual(len($w.lost), 1);
+    testing.assertContains($w.lost[0], "U+2192");
+    def h as Written init writeHandout($deck, $r, path.join($tmp, "arrow-handout.pdf"), $tmp);
+    testing.assertTrue(len($h.lost) >= 1);
+    warnLost($w.lost);
+    def clean as slides.Deck init readDeck([writeDeck($tmp, sample(), "deck.md")]);
+    testing.assertEqual(len(writePdf($clean, $r, path.join($tmp, "deck.pdf"), $tmp).lost), 0);
 }
 
 /** Announcing a write never fails, quiet or verbose. */
@@ -829,7 +852,7 @@ func testRunBadStartFlags() {
         "data-notes=\"open\" data-slide=\"2\"");
 }
 
-/** The start flags take open / closed and a slide number from 1. */
+/** The start flags take open / closed, a notes place and a slide number from 1. */
 func testStartFlags() {
     startFlags(parsed(["html", "a.md"]));
     startFlags(parsed([
@@ -840,9 +863,12 @@ func testStartFlags() {
         "--overview",
         "open",
         "--start-slide",
-        "12"
+        "12",
+        "--notes-place",
+        "Right"
     ]));
     for (def bad in [
+        ["--notes-place", "side"],
         ["--notes-panel", "Open"],
         ["--overview", "1"],
         ["--start-slide", "-1"],

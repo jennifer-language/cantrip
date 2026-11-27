@@ -108,8 +108,10 @@ it with <kbd>Ctrl</kbd>+<kbd>C</kbd>. It needs the default `jennifer`, since
 | `--notes-panel open\|closed` | HTML: the speaker-notes panel open or closed when the page opens | the deck's `notes:`, else `closed` |
 | `--start-slide N` | HTML: the slide the page opens on, from 1 | the deck's `slide:`, else `1` |
 | `--overview open\|closed` | HTML: open in the slide overview | the deck's `overview:`, else `closed` |
+| `--notes-place bottom\|top\|left\|right` | HTML: where the speaker-notes panel starts | the deck's `notes-place:`, else `bottom` |
+| `--notes-title TEXT` | HTML: the speaker-notes panel's heading | the deck's `notes-title:`, else "Speaker notes" in the deck's language |
 | `--no-numbers` | omit slide numbers | off |
-| `--credit` | on the first slide, "Powered by Jennifer's Cantrip - Markdown into slide decks" and a link to cantrip's repository; in the HTML bottom right above the slide number, in the PDF bottom left above the footer text (so in the handout's first slide too) | off |
+| `--credit` | on the first slide, "Powered by Jennifer's Cantrip - Markdown into slide decks" and a link to cantrip's repository; in the HTML bottom left on the slide number's line, in the PDF bottom left above the footer text (so in the handout's first slide too) | off |
 | `--raw-html` | pass raw HTML through unescaped | off |
 | `-v`, `--verbose` | report byte counts, and each image skipped and why | off |
 | `-a`, `--addr ADDR` | `serve`: the address to listen on | `127.0.0.1:8080` |
@@ -217,10 +219,20 @@ Open the file. No server is needed, and nothing is fetched.
 | <kbd>o</kbd> | slide overview; click, <kbd>Enter</kbd>, or <kbd>space</kbd> to jump |
 | <kbd>s</kbd> | speaker-notes panel, shown or hidden where it last was |
 | <kbd>Shift</kbd>+<kbd>s</kbd> | move the notes panel on: below the slide, above, left, right, below again (opens it when closed) |
+| <kbd>t</kbd> | restart the talk clock (or click it) |
+| <kbd>b</kbd> <kbd>.</kbd> | black screen, for a question or a demo; the same key, <kbd>Esc</kbd> or a click brings the slide back. <kbd>.</kbd> is what the blank button of many presenter remotes sends |
 | <kbd>m</kbd> | light / dark mode |
 | <kbd>f</kbd> | fullscreen |
 | <kbd>?</kbd> | the shortcut list |
 | <kbd>Esc</kbd> | close an overlay; with none open, end the presentation: leave fullscreen and go back to the page that opened the slideshow (nothing when it was opened directly). In fullscreen it works the same: Chrome and Edge let the slideshow claim the key (hold it to only leave fullscreen), Firefox and Safari leave fullscreen first and the slideshow then goes back |
+
+The notes panel shows a talk clock in its top-right corner: the time since
+the first slide change, or since you last restarted it.
+
+What you change while viewing (the notes shown or hidden, where they sit, the
+mode, the clock) is kept for the browser tab, so a reload, such as the one
+`cantrip serve` does on every save, comes back the same. A new tab starts as
+the deck was built.
 
 On a phone or tablet, swipe left or right to turn the slide, or tap the right
 or left third of the screen to go forward or back. A tap on a link follows the

@@ -167,7 +167,7 @@ light, legible handout from one source, which is usually what you want.
 | Speaker notes | embedded, hidden, <kbd>s</kbd> to show | omitted unless `--notes` |
 | Slide numbers | bottom right | in the running footer |
 | Footer text | bottom left | footer left, else the deck's title |
-| `--credit` | first slide, bottom right above the number, muted colour | first page, bottom left above the footer text, grey |
+| `--credit` | first slide, bottom left on the number's line (above the footer text when there is one), muted colour | first page, bottom left above the footer text, grey |
 
 ## Transitions
 

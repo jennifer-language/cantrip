@@ -7,13 +7,16 @@
 # notes panel and the current slide, presses s, and reads them again. Covers
 # the front-matter default, ?notes=0 / ?notes=1, the #<slide> hash, the
 # narrow-window rule, the s key, shift+s moving the panel to the top, the
-# left, the right and back, the panel's height (as tall as the longest
+# left, the right and back, --notes-place and ?notes-place= choosing where it
+# starts, the panel's height (as tall as the longest
 # notes, capped at 30% of the window, with the deck ending above it), and the
 # mode: ?mode= and the m key, which must repaint the slide; and touch: a swipe
 # or a tap on the right or left third turns the slide, a pinch does not; and
 # the touch bar, shown only for a coarse pointer that cannot hover, whose
 # buttons open and close the overview and the notes and switch the mode, and
 # which fades out after a few seconds and comes back with a tap in the middle;
+# the black screen (b, .) and the talk clock, and a reload keeping what the
+# viewer changed;
 # and Escape, which closes an overlay first and then goes back to the page the
 # slideshow was opened from.
 #
@@ -210,6 +213,79 @@ awk -v probe="$work/place.js" '
     /<\/body>/ { while ((getline line < probe) > 0) print line }
     { print }
 ' "$work/deck.html" > "$work/place.html"
+# The same probe on a page built to start with the notes on the right.
+"$JENNIFER" run bin/cantrip html "$work/deck.md" --notes-place right --out "$work/right.html" >/dev/null
+awk -v probe="$work/place.js" '
+    /<\/body>/ { while ((getline line < probe) > 0) print line }
+    { print }
+' "$work/right.html" > "$work/place-right.html"
+
+# The reload probe: on the first load it moves the notes (shift+s, to the
+# top), switches the mode and restarts the clock, then reloads; on the second
+# it reports "<place> <notes> <mode> <clock kept>". A reload must keep all
+# four, as it must under `cantrip serve`. The black screen probe follows.
+reloadprobe='<script>
+window.addEventListener("load", function () {
+    var n = document.querySelector("body > #cantrip-notes");
+    function key(k, shift) {
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: k, shiftKey: shift }));
+    }
+    if (!window.sessionStorage.getItem("probe-phase")) {
+        window.sessionStorage.setItem("probe-phase", "1");
+        key("S", true);
+        key("m", false);
+        key("t", false);
+        location.reload();
+        return;
+    }
+    var kept = JSON.parse(window.sessionStorage.getItem("cantrip:" + location.pathname));
+    var r = [n.dataset.at, n.hidden ? "closed" : "open", document.documentElement.dataset.mode,
+        typeof kept.clock === "number" ? "clock-kept" : "clock-lost"];
+    var o = document.createElement("output");
+    o.id = "probe";
+    o.textContent = r.join(" ");
+    document.body.appendChild(o);
+});
+</script>'
+printf '%s\n' "$reloadprobe" > "$work/reload.js"
+awk -v probe="$work/reload.js" '
+    /<\/body>/ { while ((getline line < probe) > 0) print line }
+    { print }
+' "$work/deck.html" > "$work/reload.html"
+
+# The black screen probe: "<after b> <after Esc> <after .> <after a click>
+# <covers the slide?> <clock before> <clock after a slide change>". The clock
+# waits at 0:00 until the first slide change starts it.
+blackprobe='<script>
+window.addEventListener("load", function () {
+    var b = document.querySelector("body > #cantrip-black");
+    var c = document.querySelector("body > #cantrip-notes > #cantrip-clock");
+    function key(k) { document.dispatchEvent(new KeyboardEvent("keydown", { key: k })); }
+    function state() { return b.hidden ? "shown" : "black"; }
+    var r = [];
+    key("b"); r.push(state());
+    var hit = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+    var covers = hit === b ? "covers" : "uncovered";
+    key("Escape"); r.push(state());
+    key("."); r.push(state());
+    b.click(); r.push(state());
+    r.push(covers);
+    r.push(c.textContent);
+    var before = Date.now();
+    key("n");
+    var started = JSON.parse(window.sessionStorage.getItem("cantrip:" + location.pathname) || "{}").clock;
+    r.push(typeof started === "number" && started >= before ? "started" : "idle");
+    var o = document.createElement("output");
+    o.id = "probe";
+    o.textContent = r.join(" ");
+    document.body.appendChild(o);
+});
+</script>'
+printf '%s\n' "$blackprobe" > "$work/black.js"
+awk -v probe="$work/black.js" '
+    /<\/body>/ { while ((getline line < probe) > 0) print line }
+    { print }
+' "$work/deck.html" > "$work/black.html"
 
 # The touch probe: the slide after each gesture, starting on slide 2.
 touchprobe='<script>
@@ -413,6 +489,16 @@ check "?mode=auto on a dark system, m picks light" 1280,800 "$page?mode=auto" \
     "open closed full 2 fitted none auto light" "--force-dark-mode"
 check "shift+s moves the notes round, s shows and hides them" 1280,800 \
     "file://$work/place.html" "bottom top left right bottom closed top closed"
+check "--notes-place right starts there, and shift+s goes on from it" 1280,800 \
+    "file://$work/place-right.html" "right bottom top left right closed bottom closed"
+check "?notes-place=top overrides the build" 1280,800 \
+    "file://$work/place-right.html?notes-place=top" "top left right bottom top closed left closed"
+check "?notes-place=side is ignored" 1280,800 \
+    "file://$work/place-right.html?notes-place=side" "right bottom top left right closed bottom closed"
+check "a reload keeps the notes place, the mode and the clock" 1280,800 \
+    "file://$work/reload.html" "top open dark clock-kept"
+check "b and . black the screen out, Esc and a click bring it back" 1280,800 \
+    "file://$work/black.html" "black shown black shown covers 0:00 started"
 check "long notes stop at 30% of the window" 1280,800 "file://$work/long-probe.html" \
     "open closed full 1 capped none light dark"
 check "swipes and taps turn the slide, a pinch does not" 390,844 \

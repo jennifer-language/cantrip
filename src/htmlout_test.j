@@ -185,6 +185,20 @@ func testSectionCredit() {
         section($deck.slides[1], 2, $opts),
         "cantrip-slide-credit"));
     testing.assertContains(script(), '!c.classList.contains("cantrip-slide-credit")');
+    # Bottom left on the counter's line; above the footer, which comes first, when there is one.
+    $opts.footer = "F";
+    def withFooter as string init section($deck.slides[0], 2, $opts);
+    testing.assertTrue(
+        strings.indexOf($withFooter, "cantrip-slide-footer") <
+            strings.indexOf($withFooter, "cantrip-slide-credit"));
+    def page as string init render($deck, $opts);
+    testing.assertContains(
+        $page,
+        '.cantrip-slide > div.cantrip-slide-credit {' +
+            "\n    position: absolute;\n    left: 80px;\n    bottom: 44px;");
+    testing.assertContains(
+        $page,
+        '.cantrip-slide > div.cantrip-slide-footer ~ div.cantrip-slide-credit { bottom: 72px; }');
 }
 
 /** A slide with no notes carries no notes element even when notes are on. */
@@ -312,6 +326,57 @@ func testNotesPlaces() {
     for (def at in ["top", "left", "right"]) {
         testing.assertContains($page, 'body > #cantrip-notes[data-at="' + $at + '"]');
     }
+}
+
+/**
+ * The notes panel carries a clock, t restarts it, and b or . blacks the
+ * screen out; the help names both keys, the page has the black screen even
+ * without notes, and print never shows it.
+ */
+func testClockAndBlackScreen() {
+    def page as string init render(fixture(), defaults());
+    def js as string init script();
+    testing.assertContains(
+        $page,
+        '</h2><span id="cantrip-clock" role="timer" title="restart the talk clock">0:00</span>');
+    testing.assertContains($page, '<div id="cantrip-black" hidden></div>');
+    testing.assertContains($js, 'else if (k === "t") { restartClock(); }');
+    testing.assertContains($js, 'else if (k === "b" || k === ".") { toggleBlack(); }');
+    testing.assertContains($js, 'if (!black.hidden) { black.hidden = true; return; }');
+    testing.assertContains(
+        $js,
+        'if (started && clockStart === null && at !== was) { restartClock(); }');
+    testing.assertContains(helpPanel(), "<kbd>t</kbd>");
+    testing.assertContains(helpPanel(), "<kbd>b</kbd> <kbd>.</kbd>");
+    def opts as Options init defaults();
+    $opts.notes = false;
+    def bare as string init render(fixture(), $opts);
+    testing.assertContains($bare, '<div id="cantrip-black" hidden></div>');
+    testing.assertFalse(strings.contains($bare, "id=\"cantrip-clock\""));
+    testing.assertContains($page, "    body > #cantrip-black,");
+}
+
+/**
+ * What the viewer changes (notes, their place, the mode, the clock) is kept
+ * in sessionStorage per page and read back over the built start, so a reload
+ * by `cantrip serve` keeps it; storage that fails is ignored.
+ */
+func testViewerStateIsKept() {
+    def js as string init script();
+    testing.assertContains($js, 'var stateKey = "cantrip:" + location.pathname;');
+    testing.assertContains($js, 'catch (err) { kept = {}; }');
+    testing.assertContains(
+        $js,
+        'if (notes && places.indexOf(kept.at) >= 0) { notes.dataset.at = kept.at; }');
+    testing.assertContains(
+        $js,
+        'if (typeof kept.notes === "boolean") { startNotes = kept.notes; }');
+    testing.assertContains(
+        $js,
+        'if (kept.mode === "light" || kept.mode === "dark") { root.dataset.mode = kept.mode; }');
+    testing.assertContains(
+        $js,
+        'var clockStart = typeof kept.clock === "number" ? kept.clock : null;');
 }
 
 /** The touch bar has a button per key action, notes only with the panel. */
@@ -568,7 +633,7 @@ func startFailure(deck as slides.Deck, opts as Options) {
 func testPickStartDefaults() {
     testing.assertEqual(
         pickStart(fixture(), defaults()),
-        Start{notes: false, slide: 1, overview: false});
+        Start{notes: false, slide: 1, overview: false, notesPlace: "bottom"});
     def got as string init render(fixture(), defaults());
     testing.assertContains(
         $got,
@@ -578,7 +643,9 @@ func testPickStartDefaults() {
 /** The front matter sets the start; values are case-insensitive. */
 func testPickStartFromFrontMatter() {
     def deck as slides.Deck init startDeck("notes: Open\nslide: 2\noverview: open\n");
-    testing.assertEqual(pickStart($deck, defaults()), Start{notes: true, slide: 2, overview: true});
+    testing.assertEqual(
+        pickStart($deck, defaults()),
+        Start{notes: true, slide: 2, overview: true, notesPlace: "bottom"});
     testing.assertContains(
         render($deck, defaults()),
         " data-notes=\"open\" data-slide=\"2\" data-overview=\"open\">");
@@ -591,12 +658,66 @@ func testPickStartOptionsWin() {
     $opts.startNotes = "closed";
     $opts.startSlide = "1";
     $opts.startOverview = "closed";
-    testing.assertEqual(pickStart($deck, $opts), Start{notes: false, slide: 1, overview: false});
+    testing.assertEqual(
+        pickStart($deck, $opts),
+        Start{notes: false, slide: 1, overview: false, notesPlace: "bottom"});
     def only as Options init defaults();
     $only.startNotes = "open";
     testing.assertEqual(
         pickStart(startDeck("slide: 2\n"), $only),
-        Start{notes: true, slide: 2, overview: false});
+        Start{notes: true, slide: 2, overview: false, notesPlace: "bottom"});
+}
+
+/**
+ * The notes panel starts where `notes-place:` or the option says, bottom by
+ * default; the option wins, values are case-insensitive, and the page reads
+ * ?notes-place= from its URL against the same places the panel moves through.
+ */
+func testNotesPlaceStart() {
+    testing.assertEqual(pickStart(fixture(), defaults()).notesPlace, "bottom");
+    def deck as slides.Deck init startDeck("notes-place: Right
+");
+    testing.assertEqual(pickStart($deck, defaults()).notesPlace, "right");
+    testing.assertContains(
+        render($deck, defaults()),
+        '<aside id="cantrip-notes" hidden data-at="right"');
+    def opts as Options init defaults();
+    $opts.notesPlace = "top";
+    testing.assertEqual(pickStart($deck, $opts).notesPlace, "top");
+    testing.assertEqual(
+        startFailure(startDeck("notes-place: side\n"), defaults()),
+        "start: notes-place wants bottom, top, left, right, got \"side\"");
+    testing.assertEqual(notesPlace(""), "bottom");
+    testing.assertEqual(NOTES_PLACES, ["bottom", "top", "left", "right"]);
+    def js as string init script();
+    testing.assertContains($js, 'var places = ["bottom", "top", "left", "right"];');
+    testing.assertContains($js, 'var askedPlace = query.get("notes-place");');
+    testing.assertContains(
+        $js,
+        'if (notes && places.indexOf(askedPlace) >= 0) { notes.dataset.at = askedPlace; }');
+}
+
+/**
+ * The notes heading is the language's words unless the option or the deck's
+ * `notes-title:` names another; it is the panel's label and the touch-bar
+ * button's too, and is escaped like any deck text.
+ */
+func testNotesTitle() {
+    def plain as string init render(fixture(), defaults());
+    testing.assertContains($plain, "<h2>Speaker notes</h2>");
+    def deck as slides.Deck init startDeck("notes-title: Script & cues\n");
+    def got as string init render($deck, defaults());
+    testing.assertContains($got, "<h2>Script &amp; cues</h2>");
+    testing.assertContains(
+        $got,
+        '<aside id="cantrip-notes" hidden data-at="bottom" aria-label="Script &amp; cues"');
+    testing.assertContains($got, 'data-act="notes" aria-label="Script &amp; cues"');
+    def opts as Options init defaults();
+    $opts.notesTitle = "What to say";
+    testing.assertEqual(notesTitle($deck, $opts, locale.words("en")), "What to say");
+    testing.assertEqual(
+        notesTitle(startDeck("lang: de\n"), defaults(), locale.words("de")),
+        "Sprechernotizen");
 }
 
 /** A bad value in the front matter is refused at build time. */
@@ -645,7 +766,7 @@ func testScriptStart() {
     testing.assertContains($js, 'return isNaN(n) ? startSlide : n - 1;');
     testing.assertContains(
         $js,
-        'if (e.shiftKey) { moveNotes(); } else { setNotes(notes.hidden); }');
+        'if (e.shiftKey) { moveNotes(); } else { setNotes(notes.hidden); keep(); }');
     testing.assertContains($js, '(min-width: 800px) and (min-height: 560px)');
 }
 
