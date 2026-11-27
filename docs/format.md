@@ -109,10 +109,13 @@ front-matter value `1`). `notes: open` in a page built with `--no-notes` fails
 too, with "notes: open needs the notes". In the URL, which is the viewer's
 input, an unknown value is ignored and the built-in start applies.
 
-The notes panel is as tall as the longest notes in the deck, at most 30% of
-the window (longer notes scroll), and keeps that height from slide to slide.
-While it is open, the slide is scaled into the space above it, so the panel
-never covers it. On a
+The notes panel opens below the slide; <kbd>Shift</kbd>+<kbd>s</kbd> moves it
+above the slide, then to the left, then to the right, then below again.
+Below or above, it is as tall as the longest notes in the deck, at most 30% of
+the window (longer notes scroll), and keeps that height from slide to slide;
+beside the slide it is the full height and about a quarter of the width.
+While it is open, the slide is scaled into the space that is left, so the
+panel never covers it. On a
 window narrower than 800 pixels or lower than 560 (a phone), there is no room
 for both, so the page starts with the notes closed even when the deck says
 `open`; <kbd>s</kbd> opens them, and `?notes=1` in the URL opens them at

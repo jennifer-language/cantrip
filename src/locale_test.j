@@ -10,7 +10,7 @@
  */
 use testing;
 
-# every field of a table, in order, so a test can look at all twenty
+# every field of a table, in order, so a test can look at all twenty-one
 func all(w as Words) {
     return [
         $w.slide,
@@ -32,7 +32,8 @@ func all(w as Words) {
         $w.modeButton,
         $w.fullscreenButton,
         $w.noNotes,
-        $w.untitled
+        $w.untitled,
+        $w.notesMoveKey
     ];
 }
 
@@ -41,7 +42,7 @@ func all(w as Words) {
 func testEveryLanguageHasEveryWord() {
     for (def lang in languages()) {
         def got as list of string init all(words($lang));
-        testing.assertEqual(len($got), 20);
+        testing.assertEqual(len($got), 21);
         for (def w in $got) {
             testing.assertTrue(strings.trim($w) != "");
             testing.assertFalse(strings.contains($w, "<") or strings.contains($w, ">") or
@@ -56,6 +57,7 @@ func testTheLanguagesDiffer() {
     testing.assertEqual(words("fr").slide, "Diapositive");
     testing.assertEqual(words("ja").fullscreenButton, "全画面");
     testing.assertEqual(words("en").noNotes, "No notes for this slide.");
+    testing.assertEqual(words("de").notesMoveKey, "Sprechernotizen verschieben");
 }
 
 # Only the primary subtag counts, and an unknown language is English.

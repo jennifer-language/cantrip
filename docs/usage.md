@@ -214,7 +214,8 @@ Open the file. No server is needed, and nothing is fetched.
 | <kbd>Home</kbd> <kbd>End</kbd> | first / last slide |
 | digits then <kbd>Enter</kbd> | jump to a slide |
 | <kbd>o</kbd> | slide overview; click, <kbd>Enter</kbd>, or <kbd>space</kbd> to jump |
-| <kbd>s</kbd> | speaker-notes panel |
+| <kbd>s</kbd> | speaker-notes panel, shown or hidden where it last was |
+| <kbd>Shift</kbd>+<kbd>s</kbd> | move the notes panel on: below the slide, above, left, right, below again (opens it when closed) |
 | <kbd>m</kbd> | light / dark mode |
 | <kbd>f</kbd> | fullscreen |
 | <kbd>?</kbd> | the shortcut list |

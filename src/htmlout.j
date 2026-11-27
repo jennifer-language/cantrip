@@ -708,6 +708,7 @@ export func helpPanelIn(words as locale.Words) {
         helpRow('<kbd>1</kbd>..<kbd>9</kbd> <kbd>enter</kbd>', $words.jump),
         helpRow('<kbd>o</kbd>', $words.overviewKey),
         helpRow('<kbd>s</kbd>', $words.notesKey),
+        helpRow('<kbd>shift</kbd>+<kbd>s</kbd>', $words.notesMoveKey),
         helpRow('<kbd>m</kbd>', $words.modeKey),
         helpRow('<kbd>f</kbd>', $words.fullscreenKey),
         helpRow('<kbd>?</kbd>', $words.helpKey),
@@ -805,7 +806,8 @@ export func render(deck as slides.Deck, opts as Options) {
     $parts[] = "</main>";
     $parts[] = overview($deck);
     if ($opts.notes) {
-        $parts[] = '<aside id="cantrip-notes" hidden aria-label="' + attrValue($words.notes) +
+        $parts[] = '<aside id="cantrip-notes" hidden data-at="bottom" aria-label="' +
+            attrValue($words.notes) +
             '" data-empty="' + attrValue($words.noNotes) + '"><h2>' + html.escape($words.notes) +
             '</h2><div id="cantrip-notes-body"></div></aside>';
     }
@@ -889,10 +891,14 @@ export func script() {
 
     function clamp(n) { return Math.max(0, Math.min(slides.length - 1, n)); }
 
-    // The panel is as tall as the longest notes in the deck (the CSS caps it
-    // at 30% of the window), measured once per opening and window size, so it
-    // keeps its height from slide to slide and the slide is not rescaled on
-    // every step. While it is open the deck ends above it.
+    // The panel sits below the slide, above it, or beside it on the left or
+    // right; shift+s moves it on in that order. Below or above, it is as tall
+    // as the longest notes in the deck (the CSS caps it at 30% of the window),
+    // measured once per opening, move and window size, so it keeps its height
+    // from slide to slide and the slide is not rescaled on every step. Beside
+    // the slide its width is set by the CSS. While it is open the deck ends
+    // where the panel begins.
+    var places = ["bottom", "top", "left", "right"];
     function notesText(i) {
         var src = slides[i].querySelector(":scope > div.cantrip-slide-notes:last-child");
         if (src) { return src.innerHTML; }
@@ -902,11 +908,15 @@ export func script() {
     }
 
     function sizeNotes() {
-        if (!notes || notes.hidden) {
-            deck.style.bottom = "";
+        places.forEach(function (p) { deck.style[p] = ""; });
+        if (!notes || notes.hidden) { return; }
+        var place = notes.dataset.at;
+        notes.style.height = "";
+        if (place === "left" || place === "right") {
+            notesBody.innerHTML = notesText(at);
+            deck.style[place] = notes.getBoundingClientRect().width + "px";
             return;
         }
-        notes.style.height = "";
         var tallest = 0;
         for (var i = 0; i < slides.length; i++) {
             notesBody.innerHTML = notesText(i);
@@ -914,7 +924,7 @@ export func script() {
         }
         notesBody.innerHTML = notesText(at);
         notes.style.height = tallest + "px";
-        deck.style.bottom = tallest + "px";
+        deck.style[place] = tallest + "px";
     }
 
     // While the notes are open the deck ends above them, so the slide is
@@ -932,6 +942,14 @@ export func script() {
         deck.classList.toggle("cantrip-notes-open", open);
         sizeNotes();
         fit();
+    }
+
+    // Shift+s: the panel moves to the next place, and opens if it was closed.
+    function moveNotes() {
+        if (!notes) { return; }
+        var i = places.indexOf(notes.dataset.at);
+        notes.dataset.at = places[(i + 1) % places.length];
+        setNotes(true);
     }
 
     function showNotes() {
@@ -1040,7 +1058,10 @@ export func script() {
         } else if (k === "Home") { show(0); e.preventDefault(); }
         else if (k === "End") { show(slides.length - 1); e.preventDefault(); }
         else if (k === "o") { toggle(overview); }
-        else if (k === "s" && notes) { setNotes(notes.hidden); }
+        else if ((k === "s" || k === "S") && notes) {
+            // By shift, not by case, so caps lock does not turn s into a move.
+            if (e.shiftKey) { moveNotes(); } else { setNotes(notes.hidden); }
+        }
         else if (k === "m") { toggleMode(); }
         else if (k === "f") { toggleFullscreen(); }
         else if (k === "?") { toggle(help); }

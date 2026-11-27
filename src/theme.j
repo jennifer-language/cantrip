@@ -1514,14 +1514,17 @@ body > #cantrip-progress {
     background: var(--accent);
     width: 0;
     transition: width 120ms linear;
-    z-index: 10;
+    z-index: 12;
 }
 
 /*
- * The notes panel is as tall as the longest notes in the deck, at most 30% of the
- * window, and scrolls past that. While it is open the deck ends above it (the
- * script measures the panel, marks the deck cantrip-notes-open and fits the
- * slide into what is left), so the panel never covers the slide.
+ * The notes panel sits where its data-at says: below the slide (the default),
+ * above it, or beside it on the left or right. Below or above, it is as tall as
+ * the longest notes in the deck, at most 30% of the window; beside the slide it
+ * is the full height and about a quarter of the width. Longer notes scroll.
+ * While it is open the deck ends where it begins (the script measures the
+ * panel, marks the deck cantrip-notes-open and fits the slide into what is
+ * left), so the panel never covers the slide.
  */
 body > #cantrip-notes {
     position: fixed;
@@ -1539,6 +1542,19 @@ body > #cantrip-notes {
 }
 
 body > #cantrip-notes[hidden] { display: none; }
+body > #cantrip-notes[data-at="top"] {
+    inset: 0 0 auto 0;
+    border-top: 0;
+    border-bottom: 2px solid var(--accent);
+}
+body > #cantrip-notes[data-at="left"],
+body > #cantrip-notes[data-at="right"] {
+    width: clamp(240px, 28vw, 480px);
+    max-height: none;
+    border-top: 0;
+}
+body > #cantrip-notes[data-at="left"] { inset: 0 auto 0 0; border-right: 2px solid var(--accent); }
+body > #cantrip-notes[data-at="right"] { inset: 0 0 0 auto; border-left: 2px solid var(--accent); }
 body > #cantrip-notes > h2 {
     font-size: 15px;
     margin: 0 0 8px;

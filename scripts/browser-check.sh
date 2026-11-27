@@ -6,7 +6,8 @@
 # Chrome) loads a built deck with a probe script appended, which reads the
 # notes panel and the current slide, presses s, and reads them again. Covers
 # the front-matter default, ?notes=0 / ?notes=1, the #<slide> hash, the
-# narrow-window rule, the s key, the panel's height (as tall as the longest
+# narrow-window rule, the s key, shift+s moving the panel to the top, the
+# left, the right and back, the panel's height (as tall as the longest
 # notes, capped at 30% of the window, with the deck ending above it), and the
 # mode: ?mode= and the m key, which must repaint the slide; and touch: a swipe
 # or a tap on the right or left third turns the slide, a pinch does not; and
@@ -161,6 +162,54 @@ awk -v probe="$work/probe.js" '
     /<\/body>/ { while ((getline line < probe) > 0) print line }
     { print }
 ' "$work/long.html" > "$work/long-probe.html"
+
+# The places probe: shift+s moves the open panel from the bottom to the top,
+# the left, the right and back; s closes it; shift+s opens it again one place
+# on; s under caps lock ("S" without shift) still only closes. Each open state
+# is its place, or "<place>-stale" unless the deck ends exactly where the panel
+# begins, on that side only, and the two do not overlap.
+placeprobe='<script>
+window.addEventListener("load", function () {
+    var n = document.querySelector("body > #cantrip-notes");
+    var d = document.querySelector("body > #cantrip-deck");
+    var sides = ["bottom", "top", "left", "right"];
+    function key(k, shift) {
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: k, shiftKey: shift }));
+    }
+    function state() {
+        if (n.hidden) {
+            return sides.every(function (s) { return d.style[s] === ""; }) ? "closed" : "closed-stale";
+        }
+        var at = n.dataset.at;
+        var p = n.getBoundingClientRect();
+        var b = d.getBoundingClientRect();
+        var size = at === "left" || at === "right" ? p.width : p.height;
+        var only = sides.every(function (s) { return s === at || d.style[s] === ""; });
+        var apart = p.right <= b.left + 1 || b.right <= p.left + 1 ||
+            p.bottom <= b.top + 1 || b.bottom <= p.top + 1;
+        // The style keeps three decimals of a fractional width, so within a pixel.
+        var fits = /px$/.test(d.style[at]) && Math.abs(parseFloat(d.style[at]) - size) < 1;
+        return fits && only && apart ? at : at + "-stale";
+    }
+    var r = [state()];
+    for (var i = 0; i < 4; i++) { key("S", true); r.push(state()); }
+    key("s", false);
+    r.push(state());
+    key("S", true);
+    r.push(state());
+    key("S", false);
+    r.push(state());
+    var o = document.createElement("output");
+    o.id = "probe";
+    o.textContent = r.join(" ");
+    document.body.appendChild(o);
+});
+</script>'
+printf '%s\n' "$placeprobe" > "$work/place.js"
+awk -v probe="$work/place.js" '
+    /<\/body>/ { while ((getline line < probe) > 0) print line }
+    { print }
+' "$work/deck.html" > "$work/place.html"
 
 # The touch probe: the slide after each gesture, starting on slide 2.
 touchprobe='<script>
@@ -362,6 +411,8 @@ check "?mode=auto on a light system, m picks dark" 1280,800 "$page?mode=auto" \
     "open closed full 2 fitted none auto dark"
 check "?mode=auto on a dark system, m picks light" 1280,800 "$page?mode=auto" \
     "open closed full 2 fitted none auto light" "--force-dark-mode"
+check "shift+s moves the notes round, s shows and hides them" 1280,800 \
+    "file://$work/place.html" "bottom top left right bottom closed top closed"
 check "long notes stop at 30% of the window" 1280,800 "file://$work/long-probe.html" \
     "open closed full 1 capped none light dark"
 check "swipes and taps turn the slide, a pinch does not" 390,844 \

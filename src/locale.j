@@ -42,6 +42,7 @@ use lists;
  * @field fullscreenButton {string} the touch bar's fullscreen button
  * @field noNotes {string} what the notes panel shows for a slide without notes
  * @field untitled {string} the page title of a deck with no title at all
+ * @field notesMoveKey {string} help: the key that moves the speaker notes
  */
 export def struct Words {
     slide as string,
@@ -63,7 +64,8 @@ export def struct Words {
     modeButton as string,
     fullscreenButton as string,
     noNotes as string,
-    untitled as string
+    untitled as string,
+    notesMoveKey as string
 };
 
 /**
@@ -108,7 +110,8 @@ func one(w as list of string) {
         modeButton: $w[16],
         fullscreenButton: $w[17],
         noNotes: $w[18],
-        untitled: $w[19]
+        untitled: $w[19],
+        notesMoveKey: $w[20]
     };
 }
 
@@ -140,7 +143,8 @@ export func words(tag as string) {
                 "Hell oder dunkel",
                 "Vollbild",
                 "Keine Notizen zu dieser Folie.",
-                "Folien"
+                "Folien",
+                "Sprechernotizen verschieben"
             ]);
         }
         when "es" {
@@ -164,7 +168,8 @@ export func words(tag as string) {
                 "Modo claro u oscuro",
                 "Pantalla completa",
                 "No hay notas para esta diapositiva.",
-                "Diapositivas"
+                "Diapositivas",
+                "mover las notas del orador"
             ]);
         }
         when "fr" {
@@ -188,7 +193,8 @@ export func words(tag as string) {
                 "Mode clair ou sombre",
                 "Plein écran",
                 "Pas de notes pour cette diapositive.",
-                "Diapositives"
+                "Diapositives",
+                "déplacer les notes de l'orateur"
             ]);
         }
         when "it" {
@@ -212,7 +218,8 @@ export func words(tag as string) {
                 "Modalità chiara o scura",
                 "Schermo intero",
                 "Nessuna nota per questa diapositiva.",
-                "Diapositive"
+                "Diapositive",
+                "spostare le note del relatore"
             ]);
         }
         when "ja" {
@@ -236,7 +243,8 @@ export func words(tag as string) {
                 "ライトまたはダークモード",
                 "全画面",
                 "このスライドにはノートがありません。",
-                "スライド"
+                "スライド",
+                "発表者ノートを移動"
             ]);
         }
         when "nl" {
@@ -260,7 +268,8 @@ export func words(tag as string) {
                 "Lichte of donkere modus",
                 "Volledig scherm",
                 "Geen notities bij deze dia.",
-                "Dia's"
+                "Dia's",
+                "sprekersnotities verplaatsen"
             ]);
         }
         when "pl" {
@@ -284,7 +293,8 @@ export func words(tag as string) {
                 "Tryb jasny lub ciemny",
                 "Pełny ekran",
                 "Brak notatek do tego slajdu.",
-                "Slajdy"
+                "Slajdy",
+                "przesuń notatki prelegenta"
             ]);
         }
         when "pt" {
@@ -308,7 +318,8 @@ export func words(tag as string) {
                 "Modo claro ou escuro",
                 "Tela cheia",
                 "Sem notas para este slide.",
-                "Slides"
+                "Slides",
+                "mover as notas do apresentador"
             ]);
         }
         when "ru" {
@@ -332,7 +343,8 @@ export func words(tag as string) {
                 "Светлый или тёмный режим",
                 "Полный экран",
                 "Нет заметок к этому слайду.",
-                "Слайды"
+                "Слайды",
+                "переместить заметки докладчика"
             ]);
         }
         when "zh" {
@@ -356,7 +368,8 @@ export func words(tag as string) {
                 "浅色或深色模式",
                 "全屏",
                 "此幻灯片没有备注。",
-                "幻灯片"
+                "幻灯片",
+                "移动演讲者备注"
             ]);
         }
         else {
@@ -380,7 +393,8 @@ export func words(tag as string) {
                 "Light or dark mode",
                 "Fullscreen",
                 "No notes for this slide.",
-                "Slides"
+                "Slides",
+                "move the speaker notes"
             ]);
         }
     }

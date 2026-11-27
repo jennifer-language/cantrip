@@ -268,6 +268,26 @@ func testHelpPanel() {
     }
 }
 
+/**
+ * The notes panel starts below the slide; shift+s moves it on through top,
+ * left and right and back, the help names that key, and the stylesheet has a
+ * rule for each place.
+ */
+func testNotesPlaces() {
+    def page as string init render(fixture(), defaults());
+    def js as string init script();
+    testing.assertContains($page, '<aside id="cantrip-notes" hidden data-at="bottom"');
+    testing.assertContains($js, 'var places = ["bottom", "top", "left", "right"];');
+    testing.assertContains($js, 'notes.dataset.at = places[(i + 1) % places.length];');
+    testing.assertContains($js, 'deck.style[place] = notes.getBoundingClientRect().width + "px";');
+    testing.assertContains($js, 'deck.style[place] = tallest + "px";');
+    testing.assertContains(helpPanel(), "<kbd>shift</kbd>+<kbd>s</kbd>");
+    testing.assertContains(helpPanel(), "move the speaker notes");
+    for (def at in ["top", "left", "right"]) {
+        testing.assertContains($page, 'body > #cantrip-notes[data-at="' + $at + '"]');
+    }
+}
+
 /** The touch bar has a button per key action, notes only with the panel. */
 func testTouchBar() {
     def got as string init touchBar(true);
@@ -597,7 +617,9 @@ func testScriptStart() {
         $js,
         'var startOverview = asked("overview", deck.dataset.overview === "open");');
     testing.assertContains($js, 'return isNaN(n) ? startSlide : n - 1;');
-    testing.assertContains($js, 'else if (k === "s" && notes) { setNotes(notes.hidden); }');
+    testing.assertContains(
+        $js,
+        'if (e.shiftKey) { moveNotes(); } else { setNotes(notes.hidden); }');
     testing.assertContains($js, '(min-width: 800px) and (min-height: 560px)');
 }
 
